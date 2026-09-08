@@ -9,6 +9,15 @@ env/
 # Ferramentas locais (log gerado por hook, não faz parte do projeto)
 .claude/CONTEXT_LOG.md
 
+# Build web: docs/ e o resultado publicado; build/ e cache sao intermediarios
+build/
+web-cache/
+
+# Capturas e logs de depuracao gerados na raiz
+.playwright-mcp/
+/*.png
+console-*.log
+
 # Sistema operacional
 Thumbs.db
 desktop.ini

@@ -9,6 +9,12 @@ desenhada na tela dessincroniza do carrinho de verdade. Nada disso pode virar
 número solto no meio da lógica.
 """
 
+import sys
+
+# No navegador (build WebAssembly via pygbag) não há janela para redimensionar
+# nem processo para encerrar: tela cheia e "sair" não fazem sentido.
+NO_NAVEGADOR = sys.platform == "emscripten"
+
 # ---------------------------------------------------------------------------
 # Tela
 # ---------------------------------------------------------------------------

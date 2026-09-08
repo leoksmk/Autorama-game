@@ -41,18 +41,28 @@ class KeyboardDriver(InputDriver):
 
     ÍON   -> A (acelerador), S (ação)
     ÍGNIS -> L (acelerador), K (ação)
+
+    O mapa de teclas é resolvido no primeiro read(), e não como atributo de
+    classe nem no __init__. As constantes pygame.K_* só existem depois que o
+    pygame terminou de carregar, e na versão WebAssembly (pygbag) esse
+    carregamento é adiado — resolver pygame.K_a cedo demais derrubava o jogo
+    antes de a tela abrir. Adiar até o primeiro uso vale para qualquer ordem
+    de inicialização.
     """
 
-    MAPA = {
-        "p1_throttle": pygame.K_a,
-        "p1_action": pygame.K_s,
-        "p2_throttle": pygame.K_l,
-        "p2_action": pygame.K_k,
-    }
+    def __init__(self) -> None:
+        self.mapa: dict[str, int] | None = None
 
     def read(self) -> dict:
+        if self.mapa is None:
+            self.mapa = {
+                "p1_throttle": pygame.K_a,
+                "p1_action": pygame.K_s,
+                "p2_throttle": pygame.K_l,
+                "p2_action": pygame.K_k,
+            }
         teclas = pygame.key.get_pressed()
-        return {nome: bool(teclas[tecla]) for nome, tecla in self.MAPA.items()}
+        return {nome: bool(teclas[tecla]) for nome, tecla in self.mapa.items()}
 
 
 class GpioDriver(InputDriver):

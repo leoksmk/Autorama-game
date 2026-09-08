@@ -1,9 +1,15 @@
 # ORBITAL DERBY
 
+**Jogue no navegador: https://leoksmk.github.io/Autorama-game/**
+
 Front-end de um autorama de 2 pistas com tema espacial original. Nesta etapa
-roda **100% simulado no PC**: teclado na entrada, pista integrada por software,
+roda **100% simulado**: teclado na entrada, pista integrada por software,
 nenhuma dependência de GPIO. A corrida é completável do início ao fim sem
 nenhum hardware conectado.
+
+A versão web é o mesmo código compilado para WebAssembly — dois jogadores no
+mesmo teclado, sem instalar nada. O primeiro carregamento baixa o interpretador
+Python e o pygame (~10 MB) e leva alguns segundos.
 
 ## Como rodar
 
@@ -20,6 +26,29 @@ sem aceleração gráfica), rode sem o modo escalado:
 ```bash
 ORBITAL_NO_SCALED=1 python main.py
 ```
+
+## Versão web
+
+O build está em `docs/`, que é a pasta servida pelo GitHub Pages. Para
+regenerar depois de mexer no jogo:
+
+```bash
+pip install pygbag
+python tools/build_web.py
+```
+
+O script existe porque o pygbag batiza o pacote com o nome da pasta do projeto
+— que aqui tem acento e cedilha, o que quebraria a URL. Ele compila numa cópia
+temporária com nome ASCII e traz o resultado para `docs/`.
+
+Duas coisas no código existem por causa do navegador, e não são cosméticas:
+
+- `main.py` importa `pygame` explicitamente, mesmo sem usar. O pygbag decide o
+  que embarcar no WebAssembly lendo os imports do ponto de entrada; sem esse
+  import, o pygame chegava como stub vazio e o jogo morria no `pygame.init()`.
+- `KeyboardDriver` resolve o mapa de teclas no primeiro `read()`, não em tempo
+  de import. As constantes `pygame.K_*` ainda não existem quando o módulo é
+  carregado no navegador.
 
 ## Controles
 

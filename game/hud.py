@@ -341,12 +341,13 @@ class Hud:
         self._texto(tela, self.f_peq, "Dois cargueiros, um anel de detritos e a ÍRIS-9 vigiando.",
                     cx, 182, cfg.COR_TEXTO_FRACO, centro=True)
 
-        # Cartão de controles
-        w, h = 660, 232
-        x, y = cx - w // 2, 232
+        # Cartão de controles. A altura acompanha o número de linhas: com as
+        # regras atuais são sete, e um painel fixo cortava as últimas.
+        w, h = 700, 300
+        x, y = cx - w // 2, 214
         self._painel(tela, x, y, w, h)
 
-        col = [x + 28, x + 348]
+        col = [x + 28, x + 368]
         for i, (nome, cor, acel, acao) in enumerate((
             (cfg.NOME_P1, cfg.COR_P1, "A", "S"),
             (cfg.NOME_P2, cfg.COR_P2, "L", "K"),
@@ -372,9 +373,11 @@ class Hud:
 
         pisca = 0.5 + 0.5 * math.sin(self._t * 4)
         self._texto(tela, self.f_medio, "Espaço para começar",
-                    cx, 500, _mistura(cfg.COR_TEXTO_FRACO, cfg.COR_TEXTO, pisca), centro=True)
-        self._texto(tela, self.f_mini, "F11 tela cheia · Esc sai",
-                    cx, 536, cfg.COR_TEXTO_FRACO, centro=True)
+                    cx, y + h + 22, _mistura(cfg.COR_TEXTO_FRACO, cfg.COR_TEXTO, pisca),
+                    centro=True)
+        extras = "R reinicia" if cfg.NO_NAVEGADOR else "F11 tela cheia · R reinicia · Esc sai"
+        self._texto(tela, self.f_mini, extras, cx, y + h + 58,
+                    cfg.COR_TEXTO_FRACO, centro=True)
 
     def tela_contagem(self, tela, restante: float) -> None:
         cx = cfg.LARGURA // 2

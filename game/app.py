@@ -7,10 +7,15 @@ Loop principal e máquina de telas.
 Esta camada é a única que conhece pygame.event e a única que instancia os
 drivers. A lógica de jogo recebe dicionários e escreve no barramento; ela não
 sabe de onde vieram os botões nem para onde vai o PWM.
+
+O loop é assíncrono porque a versão web (compilada para WebAssembly com pygbag)
+exige devolver o controle ao navegador uma vez por frame. No desktop isso não
+custa nada: `asyncio.run` roda o mesmo loop.
 """
 
 from __future__ import annotations
 
+import asyncio
 import os
 
 import pygame
@@ -23,6 +28,8 @@ from .effects import Effects
 from .hud import Hud
 from .race import Race
 from .render import Renderer
+
+NO_NAVEGADOR = cfg.NO_NAVEGADOR
 
 ATRACAO, CONTAGEM, CORRIDA, RESULTADO = "atracao", "contagem", "corrida", "resultado"
 
@@ -74,7 +81,10 @@ class App:
         ORBITAL_NO_SCALED=1, para pular o SCALED de saída.
         """
         base = pygame.FULLSCREEN if self.fullscreen else 0
-        if os.environ.get("ORBITAL_NO_SCALED") == "1":
+        if NO_NAVEGADOR:
+            # O canvas já tem o tamanho certo; SCALED e vsync só atrapalham.
+            tentativas = ((0, 0),)
+        elif os.environ.get("ORBITAL_NO_SCALED") == "1":
             tentativas = ((base, 0),)
         else:
             tentativas = (
@@ -110,7 +120,7 @@ class App:
             elif evento.type == pygame.KEYDOWN:
                 if evento.key == pygame.K_ESCAPE:
                     self.rodando = False
-                elif evento.key == pygame.K_F11:
+                elif evento.key == pygame.K_F11 and not NO_NAVEGADOR:
                     self.alternar_fullscreen()
                 elif evento.key == pygame.K_F3:
                     self.mostrar_fps = not self.mostrar_fps
@@ -185,7 +195,13 @@ class App:
 
         pygame.display.flip()
 
-    def rodar(self) -> None:
+    async def rodar(self) -> None:
+        """
+        Loop principal.
+
+        O `await` no fim de cada frame é o que devolve o controle ao navegador
+        na versão web — sem ele a aba trava. No desktop é um no-op barato.
+        """
         try:
             while self.rodando:
                 # Clamp de dt: uma janela arrastada ou um hiccup do SO não pode
@@ -194,7 +210,9 @@ class App:
                 self._eventos()
                 self.atualizar(dt)
                 self.desenhar(dt)
+                await asyncio.sleep(0)
         finally:
             self.entrada.close()
             self.bus.close()
-            pygame.quit()
+            if not NO_NAVEGADOR:
+                pygame.quit()
