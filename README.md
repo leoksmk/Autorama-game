@@ -281,11 +281,10 @@ ainda funcionam (o segundo assume a nave livre), mas o HUD avisa.
 | ESP → PC | `K xy` | sinal de vida a cada 500 ms, com o estado dos dois botões |
 | PC → ESP | `?` | pergunta quem é |
 | PC → ESP | `ID n` | grava o id (1 ou 2) |
-| PC → ESP | `M <duty>` | PWM daquela pista, 0..1000. **O jogo ainda não manda.** No firmware 1.2 é ignorado; no 3.0 vira o comando de rádio para o carrinho |
+| PC → ESP | `M <duty>` | reservado: PWM daquela pista, 0..1000. O jogo não manda e o firmware ignora |
 | PC → ESP | `D <0\|1>` | liga/desliga o diagnóstico: nível cru dos pinos a cada 500 ms |
 | PC → ESP | `VARRER` | acha em que GPIO o switch está ligado (trava o loop por ~11 s) |
-| ESP → PC | `R1` / `R0` | só no 3.0: estado do rádio para o carrinho |
-| ESP → PC | `[ctrl] ...` | só no 3.0: linha de diagnóstico a cada 3 s |
+| ESP → PC | `[ctrl] ...` | resposta do diagnóstico e da varredura |
 
 O jogo **ignora em silêncio** toda linha que não reconhece — é o que faz o
 mesmo código servir aos dois firmwares e aguentar o log de boot da ROM do ESP,
@@ -588,23 +587,26 @@ total de partículas vivas (padrão 320).
 
 ## Limitações conhecidas
 
-- **O controle já foi testado numa C3 SuperMini de verdade**: apresenta-se na
-  USB, manda os botões e o jogo joga com ele.
+- **O controle está testado numa C3 SuperMini de verdade**: apresenta-se na
+  USB, manda os botões e as duas versões do jogo jogam com ele.
 - A saída de PWM para as pistas continua nula nas duas versões: a regra calcula
-  o PWM e a telemetria mostra, mas nada sai para um motor ainda.
-- **O controle está com o 1.2, que não tem rádio: o carrinho não anda.** O jogo
-  e o controle estão em dia um com o outro — é o elo controle → carrinho que
-  não existe nesta versão do firmware. O `M <duty>` que o jogo mandaria cai no
-  vazio (o 1.2 ignora), e o `orbital_carrinho` fica esperando um pacote que
-  ninguém envia.
-- **O fonte do firmware 3.0 se perdeu.** O 3.0 era o controle com ESP-NOW que
-  rodava na bancada; o fonte não estava em cache nenhum e o binário foi
-  sobrescrito ao gravar o 1.2. O antecessor dele (**2.0**, com ESP-NOW,
-  `M <duty>`, `D <0|1>` e modo bancada) foi resgatado do cache do Arduino para
-  `firmware/recuperado/` e compila — é o único fonte de controle com rádio que
-  existe hoje. Mas usa `LINK_VERSAO 2` e não conversa com o `orbital_carrinho`
-  deste repositório, que já é a versão 3 do link. O caminho de conserto está em
-  [firmware/recuperado/LEIAME.md](firmware/recuperado/LEIAME.md).
+  o PWM e a telemetria mostra, mas nada sai para um motor ainda. **Não há mais
+  firmware de carrinho neste repositório** — o elo controle → motor foi tirado
+  do escopo. O que existia está na história do git, no commit que trouxe o
+  `firmware/` para o controle de versão:
+
+  ```bash
+  git log --diff-filter=D --oneline -- firmware/orbital_carrinho
+  git show <commit>^:firmware/orbital_carrinho/orbital_carrinho.ino
+  ```
+
+- **O fonte do firmware 3.0 do controle se perdeu.** O 3.0 era a versão com
+  ESP-NOW que rodava na bancada; o fonte não estava em cache nenhum e o binário
+  foi sobrescrito ao gravar o 1.2. O antecessor dele (**2.0**, com ESP-NOW,
+  `M <duty>` e modo bancada) foi resgatado do cache do Arduino para
+  [firmware/recuperado/](firmware/recuperado/) e compila. É o único fonte de
+  controle com rádio que existe hoje — guardado como ponto de partida, caso o
+  motor volte ao escopo.
 - A 2D no navegador não tem controles ESP32: WebAssembly não tem porta COM.
   O link do GitHub Pages é sempre teclado.
 - A versão 3D não tem build web (limitação do Godot com C#) nem executável

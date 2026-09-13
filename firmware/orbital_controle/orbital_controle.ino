@@ -141,7 +141,13 @@
 // ---------------------------------------------------------------------------
 // Parâmetros
 // ---------------------------------------------------------------------------
-static const char*    VERSAO      = "1.2";
+// A versão viaja no HELLO e é como o jogo e a bancada identificam a placa.
+// Mexeu no comportamento, sobe o número — dois firmwares diferentes com o
+// mesmo número já custaram horas de depuração neste projeto.
+//   1.2  controle só-USB, dois switches
+//   1.3  + diagnóstico ('D 1'), varredura de pinos ('VARRER'), pinos no banner
+//        e a espera do pull-up assentar antes da primeira leitura no boot
+static const char*    VERSAO      = "1.3";
 static const uint32_t BAUD        = 115200;
 static const uint8_t  ID_PADRAO   = 1;
 static const uint32_t ESTAVEL_MS  = 5;     // debounce

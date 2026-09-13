@@ -46,22 +46,31 @@ Este 2.0 é, hoje, **o único fonte de controle com rádio que existe**.
 
 E ele não é substituto direto do 3.0, porque o link mudou no meio:
 
-| | controle 2.0 (recuperado) | controle 3.0 (perdido) | carrinho (no repo) |
+| | controle 2.0 (recuperado) | controle 3.0 (perdido) | carrinho (removido) |
 | --- | --- | --- | --- |
 | `LINK_VERSAO` | **2** | 3 (presumido) | **3** |
 | emparelhamento | broadcast | PAREAR/PARCEIRO | PAREAR/PARCEIRO |
 | `LINK_PROTOCOLO` | LR puro (`0x08`) | — | 11b/g/n + LR (`0x0F`) |
 
 O `espnow_link.h` que veio junto é o da **versão 2** do link, e está aqui por
-isso: sem ele o 2.0 nem compila. Mas ele não conversa com o
-`firmware/orbital_carrinho/`, que já é link versão 3 — o carrinho recebe o
-pacote, vê a versão errada e reclama no serial em vez de andar. O comentário no
-próprio `espnow_link.h` v3 explica por que o LR puro foi abandonado: ~96% de
-perda, porque `0x08` desliga 11b/g/n e o ESP-NOW em broadcast usa taxa legada.
+isso: sem ele o 2.0 nem compila. Mas ele é uma geração atrás do que o carrinho
+já falava — em link 2 o pacote sai em broadcast e sem o conserto de alcance, e
+o carrinho de link 3 receberia, veria a versão errada e reclamaria no serial em
+vez de andar. O comentário do `espnow_link.h` v3 explica por que o LR puro foi
+abandonado: ~96% de perda, porque `0x08` desliga 11b/g/n e o ESP-NOW em
+broadcast usa taxa legada.
 
-Ou seja: **para o carrinho voltar a andar, ou o 3.0 é reescrito em cima deste
-2.0 (subindo o link para a versão 3), ou o carrinho volta para o link 2.**
-A primeira é a certa; a segunda joga fora o emparelhamento e o conserto do
+O firmware do carrinho **não está mais na árvore** — o motor saiu do escopo.
+Ele está na história do git, junto com o `espnow_link.h` v3, que é a referência
+certa se um dia o link voltar:
+
+```bash
+git log --diff-filter=D --oneline -- firmware/orbital_carrinho
+git show <commit>^:firmware/orbital_carrinho/espnow_link.h
+```
+
+Se o motor voltar ao escopo, o caminho é **subir este 2.0 para o link 3**, não
+rebaixar o carrinho: a versão 3 é que tem o emparelhamento e o conserto do
 alcance.
 
 ## A lição, para não acontecer de novo
