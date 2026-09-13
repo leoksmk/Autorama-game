@@ -1,0 +1,25 @@
+<Project Sdk="Godot.NET.Sdk/4.7.2">
+
+  <!--
+    Projeto C# do Orbital Derby para Godot 4.7 (.NET).
+
+    C# e não GDScript por dois motivos concretos:
+    - serial: o System.IO.Ports do .NET abre a porta COM do ESP32 direto, sem
+      plugin nativo;
+    - testes: o núcleo de regras (scripts/core) é C# puro e roda em
+      `dotnet test` sem o Godot aberto (ver tests/ na raiz do repositório).
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>OrbitalDerby</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.IO.Ports" Version="9.0.0" />
+  </ItemGroup>
+
+</Project>

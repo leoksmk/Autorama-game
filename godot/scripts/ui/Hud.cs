@@ -1,0 +1,624 @@
+// HUD e telas. Painéis de vidro fosco (a cena 3D desfocada por trás) com o
+// conteúdo desenhado em código por cima: nada de imagem, fonte do sistema.
+//
+// A telemetria lê do barramento de saída, não das naves: é o contrato com o
+// hardware mostrado ao vivo. Se um efeito não aparece ali, ele não chegou ao
+// PWM e não seria sentido pelo carrinho físico.
+
+using System;
+using System.Linq;
+using Godot;
+using OrbitalDerby.Core;
+using OrbitalDerby.Entrada;
+
+namespace OrbitalDerby.Interface;
+
+/// <summary>Camada que desenha por cima dos painéis de vidro.</summary>
+public partial class CamadaDesenho : Control
+{
+    public Action<CamadaDesenho>? Desenhar;
+    public override void _Draw() => Desenhar?.Invoke(this);
+}
+
+/// <summary>Onde a nave está na tela neste frame (calculado pela câmera 3D).</summary>
+public readonly record struct AncoraNave(bool Visivel, Vector2 Pos, float Alfa);
+
+public partial class Hud : Control
+{
+    private sealed class Marca
+    {
+        public int Lane;
+        public string Texto = "";
+        public Color Cor;
+        public double Duracao, Idade;
+    }
+
+    private enum Vidro { P1, P2, Caixa1, Caixa2, Telemetria, Cartao }
+
+    public Font Fonte { get; private set; } = null!;
+    public Font FonteForte { get; private set; } = null!;
+    public bool MostrarFps { get; set; }
+
+    private Corrida? _corrida;
+    private SaidaNula _saida = null!;
+    private IFonteEntrada[] _fontes = Array.Empty<IFonteEntrada>();
+    private GerenteSerial _serial = null!;
+    private CamadaDesenho _tinta = null!;
+    private CamadaDesenho _marcas = null!;
+    private readonly System.Collections.Generic.List<Marca> _listaMarcas = new();
+    private readonly float[] _desvio = new float[2];
+    private readonly float[] _livre = { 1f, 1f };
+    public AncoraNave[] Ancoras { get; set; } = new AncoraNave[2];
+    private readonly Panel[] _vidros = new Panel[6];
+    private StyleBoxFlat _borda = null!;
+    private StyleBoxFlat _preenche = null!;
+
+    private EstadoApp _estado;
+    private double _contagem, _t;
+    private string _modoCamera = "";
+    // Tamanho da tela virtual. O Size do próprio Control ficava zerado por
+    // ele estar pendurado num CanvasLayer — e o HUD inteiro ia para o canto.
+    private Vector2 Tela => GetViewportRect().Size;
+
+    private static readonly Color Fraco = Paleta.TextoFraco;
+    private static readonly Color Neutra = new(0.35f, 0.45f, 0.62f, 0.55f);
+
+    public override void _Ready()
+    {
+        SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
+        MouseFilter = MouseFilterEnum.Ignore;
+
+        string[] nomes = { "Bahnschrift", "Segoe UI", "Arial" };
+        Fonte = new SystemFont { FontNames = nomes, FontWeight = 500 };
+        FonteForte = new SystemFont { FontNames = nomes, FontWeight = 700 };
+
+        // Nomes e marcadores ficam por baixo dos vidros: o painel cobre, não é coberto.
+        _marcas = new CamadaDesenho { MouseFilter = MouseFilterEnum.Ignore, Desenhar = DesenharMarcas };
+        _marcas.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
+        AddChild(_marcas);
+
+        var vidro = new ShaderMaterial { Shader = GD.Load<Shader>("res://shaders/vidro.gdshader") };
+        for (int i = 0; i < _vidros.Length; i++)
+        {
+            var sb = new StyleBoxFlat { BgColor = Colors.White, AntiAliasing = true, CornerDetail = 8 };
+            sb.SetCornerRadiusAll(16);
+            var p = new Panel { Material = vidro, MouseFilter = MouseFilterEnum.Ignore, Visible = false };
+            p.AddThemeStyleboxOverride("panel", sb);
+            AddChild(p);
+            _vidros[i] = p;
+        }
+
+        _borda = new StyleBoxFlat { DrawCenter = false, AntiAliasing = true, CornerDetail = 8 };
+        _borda.SetCornerRadiusAll(16);
+        _preenche = new StyleBoxFlat { AntiAliasing = true, CornerDetail = 8 };
+        _preenche.SetCornerRadiusAll(12);
+
+        _tinta = new CamadaDesenho { MouseFilter = MouseFilterEnum.Ignore, Desenhar = Desenhar };
+        _tinta.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
+        AddChild(_tinta);
+    }
+
+    public void Configurar(Corrida corrida, SaidaNula saida, IFonteEntrada[] fontes, GerenteSerial serial)
+    {
+        _corrida = corrida;
+        _saida = saida;
+        _fontes = fontes;
+        _serial = serial;
+    }
+
+    public void Atualizar(double dt, EstadoApp estado, double contagem, string modoCamera)
+    {
+        _t += dt;
+        _estado = estado;
+        _contagem = contagem;
+        _modoCamera = modoCamera;
+        if (_corrida is null) return;
+        PosicionarVidros();
+        foreach (var m in _listaMarcas) m.Idade += dt;
+        _listaMarcas.RemoveAll(m => m.Idade >= m.Duracao);
+        SepararNomes((float)dt);
+        ChecarObstrucao((float)dt);
+        _marcas.QueueRedraw();
+        _tinta.QueueRedraw();
+    }
+
+    /// <summary>Palavra curta que sobe da nave e some ("atingido", "bloqueado"...).</summary>
+    public void Marcar(int lane, string texto, Color cor, double duracao) =>
+        _listaMarcas.Add(new Marca { Lane = lane, Texto = texto, Cor = cor, Duracao = duracao });
+
+    // Lado a lado na tela os nomes se encavalavam: quando encostam, cada um vai para um lado.
+    private void SepararNomes(float dt)
+    {
+        var a = Ancoras[0];
+        var b = Ancoras[1];
+        float empurra = 0f, lado = 1f;
+        if (a.Visivel && b.Visivel)
+        {
+            var d = b.Pos - a.Pos;
+            lado = d.X >= 0f ? 1f : -1f;
+            if (MathF.Abs(d.Y) < 44f)
+                empurra = MathF.Max(0f, 120f - MathF.Abs(d.X)) * 0.5f;
+        }
+        float k = 1f - MathF.Exp(-dt * 12f);
+        _desvio[0] = Mathf.Lerp(_desvio[0], -lado * empurra, k);
+        _desvio[1] = Mathf.Lerp(_desvio[1], lado * empurra, k);
+    }
+
+    // Nome que cairia sobre um painel ou uma caixa do HUD some devagar: colado
+    // no rótulo da caixa de item, os dois viravam uma palavra só.
+    private void ChecarObstrucao(float dt)
+    {
+        float k = 1f - MathF.Exp(-dt * 10f);
+        for (int lane = 0; lane < 2; lane++)
+        {
+            var an = Ancoras[lane];
+            var nome = new Rect2(an.Pos.X + _desvio[lane] - 55f, an.Pos.Y - 56f, 110f, 34f);
+            _livre[lane] = Mathf.Lerp(_livre[lane], SobreHud(nome) ? 0f : 1f, k);
+        }
+    }
+
+    private bool SobreHud(Rect2 r)
+    {
+        for (int lane = 0; lane < 2; lane++)
+        {
+            if (_estado != EstadoApp.Atracao && RectPainel(lane).Grow(12f).Intersects(r))
+                return true;
+            // A caixa tem rótulo e dica embaixo dela: a margem de baixo é maior.
+            if (_estado == EstadoApp.Corrida && _corrida!.Naves[lane].Roleta.Visivel
+                && RectCaixa(lane).GrowIndividual(24f, 12f, 24f, 96f).Intersects(r))
+                return true;
+        }
+        return RectTelemetria().Intersects(r);
+    }
+
+    // -- geometria da tela ---------------------------------------------------------
+
+    private Rect2 RectPainel(int lane)
+    {
+        const float w = 390f, h = 268f;
+        return lane == 0 ? new Rect2(28f, 28f, w, h) : new Rect2(Tela.X - 28f - w, 28f, w, h);
+    }
+
+    private Rect2 RectCaixa(int lane)
+    {
+        var p = RectPainel(lane);
+        const float l = 160f;
+        var r = new Rect2(p.Position.X + (p.Size.X - l) / 2f, p.End.Y + 24f, l, l);
+        // Na revelação a caixa dá um "estufo" curto e volta.
+        var ro = _corrida!.Naves[lane].Roleta;
+        if (ro.Estado == EstadoRoleta.Revelando)
+        {
+            float k = (float)Math.Min(1.0, ro.Tempo / 0.22);
+            float s = 1f + 0.22f * MathF.Sin(k * Mathf.Pi);
+            r = r.Grow(l * (s - 1f) * 0.5f);
+        }
+        return r;
+    }
+
+    private Rect2 RectTelemetria() => new(0f, Tela.Y - 92f, Tela.X, 92f);
+
+    private Rect2 RectCartaoAtracao()
+    {
+        const float w = 1000f, h = 540f;
+        return new Rect2((Tela.X - w) / 2f, Tela.Y * 0.56f - h / 2f, w, h);
+    }
+
+    private Rect2 RectCartaoResultado()
+    {
+        const float w = 880f, h = 372f;
+        return new Rect2((Tela.X - w) / 2f, Tela.Y * 0.54f - h / 2f, w, h);
+    }
+
+    private void PosicionarVidros()
+    {
+        bool jogo = _estado != EstadoApp.Atracao;
+        Mostrar(Vidro.P1, jogo, RectPainel(0));
+        Mostrar(Vidro.P2, jogo, RectPainel(1));
+        for (int lane = 0; lane < 2; lane++)
+            Mostrar(lane == 0 ? Vidro.Caixa1 : Vidro.Caixa2,
+                    _estado == EstadoApp.Corrida && _corrida!.Naves[lane].Roleta.Visivel, RectCaixa(lane));
+        Mostrar(Vidro.Telemetria, true, RectTelemetria());
+        Mostrar(Vidro.Cartao, _estado is EstadoApp.Atracao or EstadoApp.Resultado,
+                _estado == EstadoApp.Atracao ? RectCartaoAtracao() : RectCartaoResultado());
+    }
+
+    private void Mostrar(Vidro qual, bool visivel, Rect2 r)
+    {
+        var p = _vidros[(int)qual];
+        p.Visible = visivel;
+        if (!visivel) return;
+        p.Position = r.Position;
+        p.Size = r.Size;
+    }
+
+    // -- utilidades de desenho ---------------------------------------------------------
+
+    private void Texto(CanvasItem c, string s, Vector2 pos, int tam, Color cor, bool forte = false)
+    {
+        var fonte = forte ? FonteForte : Fonte;
+        // Contorno escuro por baixo: sobre a pista clara o texto sumia.
+        c.DrawStringOutline(fonte, pos, s, HorizontalAlignment.Left, -1f, tam, Math.Clamp(tam / 5, 3, 10),
+            new Color(0f, 0f, 0f, 0.5f * cor.A));
+        c.DrawString(fonte, pos, s, HorizontalAlignment.Left, -1f, tam, cor);
+    }
+
+    private float Largura(string s, int tam, bool forte) =>
+        (forte ? FonteForte : Fonte).GetStringSize(s, HorizontalAlignment.Left, -1f, tam).X;
+
+    private void TextoDir(CanvasItem c, string s, float xDir, float y, int tam, Color cor, bool forte = false) =>
+        Texto(c, s, new Vector2(xDir - Largura(s, tam, forte), y), tam, cor, forte);
+
+    private void TextoCentro(CanvasItem c, string s, float xc, float y, int tam, Color cor, bool forte = false) =>
+        Texto(c, s, new Vector2(xc - Largura(s, tam, forte) / 2f, y), tam, cor, forte);
+
+    private static string Voltas(int v) => v == 1 ? "1 volta" : $"{v} voltas";
+
+    private void Borda(CanvasItem c, Rect2 r, Color cor, int largura = 2)
+    {
+        _borda.BorderColor = cor;
+        _borda.SetBorderWidthAll(largura);
+        c.DrawStyleBox(_borda, r);
+    }
+
+    private static void Barra(CanvasItem c, Rect2 r, float fracao, Color cor)
+    {
+        c.DrawRect(r, new Color(0.06f, 0.09f, 0.15f, 0.9f));
+        float f = Mathf.Clamp(fracao, 0f, 1f);
+        if (f > 0f)
+            c.DrawRect(new Rect2(r.Position, new Vector2(r.Size.X * f, r.Size.Y)), cor);
+        c.DrawRect(r, new Color(0.25f, 0.32f, 0.45f, 0.8f), false, 1f);
+    }
+
+    private Color Pulsando(float velocidade = 4f) =>
+        Fraco.Lerp(Paleta.Texto, 0.5f + 0.5f * MathF.Sin((float)_t * velocidade));
+
+    private static string Tempo(double s) => $"{(int)(s / 60)}:{s % 60:00.0}";
+
+    /// <summary>
+    /// Símbolo vetorial de cada face da caixa. Forma em vez de texto porque a
+    /// caixa troca de face muitas vezes por segundo: palavra nessa velocidade
+    /// não se lê, forma se lê.
+    /// </summary>
+    private static void Icone(CanvasItem c, Item item, Vector2 centro, float esc, Color cor)
+    {
+        Vector2 P(float x, float y) => centro + new Vector2(x, y) * esc;
+        float traco = 0.8f * esc;
+        switch (item)
+        {
+            case Item.Tiro:
+                c.DrawColoredPolygon(new[] { P(7f, 0f), P(-4f, -5.5f), P(-1.5f, 0f), P(-4f, 5.5f) }, cor);
+                c.DrawLine(P(-7f, -3f), P(-10f, -3f), cor, traco, true);
+                c.DrawLine(P(-7f, 3f), P(-10f, 3f), cor, traco, true);
+                break;
+            case Item.Bomba:
+                c.DrawCircle(P(0f, 1.5f), 6f * esc, cor);
+                c.DrawLine(P(2.5f, -4f), P(6f, -8f), cor, traco, true);
+                c.DrawCircle(P(6.5f, -8.5f), 1.6f * esc, new Color(1f, 0.94f, 0.75f));
+                break;
+            case Item.Escudo:
+                var hex = new Vector2[7];
+                for (int k = 0; k < 6; k++)
+                {
+                    float a = k * Mathf.Tau / 6f - Mathf.Pi / 2f;
+                    hex[k] = P(7f * MathF.Cos(a), 7f * MathF.Sin(a));
+                }
+                hex[6] = hex[0];
+                c.DrawPolyline(hex, cor, traco, true);
+                c.DrawLine(P(0f, -3.5f), P(0f, 3.5f), cor, traco, true);
+                break;
+            default:
+                c.DrawArc(centro, 7f * esc, 0f, Mathf.Tau, 40, cor, traco, true);
+                c.DrawLine(P(-5f, -5f), P(5f, 5f), cor, traco, true);
+                break;
+        }
+    }
+
+    // -- desenho ------------------------------------------------------------------------
+
+    private void Desenhar(CamadaDesenho c)
+    {
+        if (_corrida is null) return;
+
+        if (_estado != EstadoApp.Atracao)
+        {
+            for (int lane = 0; lane < 2; lane++)
+            {
+                PainelJogador(c, lane);
+                CaixaItem(c, lane);
+            }
+            Relogio(c);
+        }
+        Telemetria(c);
+
+        switch (_estado)
+        {
+            case EstadoApp.Atracao: TelaAtracao(c); break;
+            case EstadoApp.Contagem: TelaContagem(c); break;
+            case EstadoApp.Resultado: TelaResultado(c); break;
+            case EstadoApp.Corrida when _corrida.Tempo < 0.9:
+                // "Vai!" some nos primeiros instantes da prova.
+                float a = 1f - (float)(_corrida.Tempo / 0.9);
+                TextoCentro(c, "Vai!", Tela.X / 2f, Tela.Y * 0.47f, 170, new Color(Paleta.Ok, a), true);
+                break;
+        }
+
+        if (MostrarFps)
+            TextoDir(c, $"{Engine.GetFramesPerSecond():0} fps", Tela.X - 24f, 22f, 16, Fraco);
+    }
+
+    private void PainelJogador(CanvasItem c, int lane)
+    {
+        var r = RectPainel(lane);
+        var n = _corrida!.Naves[lane];
+        Color cor = Paleta.DoJogador(lane);
+        Borda(c, r, new Color(cor, 0.55f));
+
+        float x = r.Position.X + 22f, y = r.Position.Y, dir = r.End.X - 22f, larg = r.Size.X - 44f;
+
+        Texto(c, n.Nome, new Vector2(x, y + 50f), 36, cor, true);
+        int voltas = Math.Min(n.Voltas, Cfg.VoltasParaVencer);
+        TextoDir(c, $"{voltas}/{Cfg.VoltasParaVencer}", dir, y + 58f, 54, Paleta.Texto, true);
+
+        int pos = _corrida.Posicao(n);
+        Texto(c, "ritmo", new Vector2(x, y + 88f), 18, Fraco);
+        TextoDir(c, $"{pos}º", dir, y + 88f, 20, pos == 1 ? Paleta.Texto : Fraco, true);
+        Barra(c, new Rect2(x, y + 96f, larg, 12f), (float)n.Esforco, n.Esforco > 0.05 ? cor : new Color(0.2f, 0.25f, 0.35f));
+        float lx = x + larg * (float)Cfg.CalorLimiar;          // daqui para cima o motor esquenta
+        c.DrawLine(new Vector2(lx, y + 92f), new Vector2(lx, y + 112f), Fraco, 1.5f);
+
+        Texto(c, "calor", new Vector2(x, y + 132f), 18, Fraco);
+        Color corCalor = n.Superaquecimento > 0 ? Paleta.Alerta : Paleta.Ok.Lerp(Paleta.Alerta, (float)n.Calor);
+        var rc = new Rect2(x, y + 140f, larg, 14f);
+        Barra(c, rc, (float)n.Calor, corCalor);
+        if (n.Calor > 0.78 && n.Superaquecimento <= 0 && Math.Sin(_t * 14) > 0)
+            c.DrawRect(rc, Paleta.Alerta, false, 2f);
+
+        Texto(c, "slot", new Vector2(x, y + 184f), 18, Fraco);
+        var rs = new Rect2(x + 54f, y + 164f, larg - 54f, 30f);
+        c.DrawRect(rs, new Color(0.05f, 0.08f, 0.14f, 0.85f));
+        if (n.Slot is Item item)
+        {
+            Color ci = Paleta.DoItem(item);
+            c.DrawRect(rs, ci, false, 2f);
+            Icone(c, item, rs.Position + new Vector2(20f, 15f), 1.2f, ci);
+            Texto(c, Cfg.NomeItem(item), rs.Position + new Vector2(42f, 23f), 22, ci, true);
+        }
+        else if (n.Roleta.Visivel)
+        {
+            string rotulo = n.Roleta.Estado switch
+            {
+                EstadoRoleta.Oportunidade => "caixa aberta",
+                EstadoRoleta.Girando => "girando",
+                _ => "prêmio",
+            };
+            c.DrawRect(rs, cor, false, 1f);
+            Texto(c, rotulo, rs.Position + new Vector2(12f, 22f), 20, cor);
+        }
+        else
+        {
+            Texto(c, "vazio", rs.Position + new Vector2(12f, 22f), 20, Fraco);
+        }
+
+        var fonte = _fontes[lane];
+        c.DrawCircle(new Vector2(x + 5f, y + 217f), 5f, fonte.Pronta ? Paleta.Ok : Paleta.Alerta);
+        Texto(c, fonte.Descricao, new Vector2(x + 17f, y + 223f), 16, Fraco);
+
+        if (!string.IsNullOrEmpty(n.Aviso))
+            Texto(c, n.Aviso, new Vector2(x, y + 254f), 20, cor, true);
+    }
+
+    private void CaixaItem(CanvasItem c, int lane)
+    {
+        var ro = _corrida!.Naves[lane].Roleta;
+        if (_estado != EstadoApp.Corrida || !ro.Visivel) return;
+
+        var r = RectCaixa(lane);
+        Color ci = Paleta.DoItem(ro.Face);
+        bool girando = ro.Estado == EstadoRoleta.Girando;
+        bool revelando = ro.Estado == EstadoRoleta.Revelando;
+        Color borda = girando || revelando ? ci : Paleta.DoJogador(lane);
+
+        if (girando || revelando)
+        {
+            float brilho = girando ? 0.16f : 0.3f + 0.22f * MathF.Sin((float)_t * 18f);
+            _preenche.BgColor = new Color(ci, brilho);
+            c.DrawStyleBox(_preenche, r.Grow(-8f));
+        }
+        Borda(c, r, borda, 3);
+
+        // Cantoneiras: a caixa lê como caixa, não como botão.
+        float m = 12f, l = 14f;
+        foreach (var (sx, sy) in new[] { (-1, -1), (1, -1), (-1, 1), (1, 1) })
+        {
+            var canto = new Vector2(sx < 0 ? r.Position.X + m : r.End.X - m, sy < 0 ? r.Position.Y + m : r.End.Y - m);
+            c.DrawLine(canto, canto + new Vector2(-sx * l, 0f), borda, 2.5f, true);
+            c.DrawLine(canto, canto + new Vector2(0f, -sy * l), borda, 2.5f, true);
+        }
+
+        Icone(c, ro.Face, r.GetCenter(), 3.4f * r.Size.X / 160f, ci);
+
+        var fonte = _fontes[lane];
+        if (ro.Estado == EstadoRoleta.Oportunidade)
+        {
+            float frac = (float)ro.FracaoRestante;
+            bool urgente = frac < 0.35f;
+            Color corBarra = urgente ? Paleta.Alerta : Paleta.DoJogador(lane);
+            var rb = new Rect2(r.Position.X, r.End.Y + 12f, r.Size.X, 9f);
+            Barra(c, rb, frac, corBarra);
+            Color pisca = Fraco.Lerp(corBarra, 0.5f + 0.5f * MathF.Sin((float)_t * (urgente ? 18f : 9f)));
+            TextoCentro(c, fonte.RotuloAcao, r.GetCenter().X, rb.End.Y + 42f, 40, pisca, true);
+            TextoCentro(c, "aperte", r.GetCenter().X, rb.End.Y + 68f, 20, pisca);
+        }
+        else if (revelando)
+        {
+            TextoCentro(c, Cfg.NomeItem(ro.Face), r.GetCenter().X, r.End.Y + 38f, 30, ci, true);
+        }
+    }
+
+    private void Relogio(CanvasItem c)
+    {
+        TextoCentro(c, Tempo(_corrida!.Tempo), Tela.X / 2f, 64f, 44, Paleta.Texto, true);
+        TextoCentro(c, "tempo de prova", Tela.X / 2f, 88f, 16, Fraco);
+    }
+
+    private void Telemetria(CanvasItem c)
+    {
+        var r = RectTelemetria();
+        float y = r.Position.Y;
+        Texto(c, "telemetria · saída para as pistas", new Vector2(24f, y + 26f), 16, Fraco);
+
+        string serial = _serial.Conectados switch
+        {
+            0 => "nenhum controle ESP conectado",
+            1 => "1 controle ESP conectado",
+            int k => $"{k} controles ESP conectados",
+        };
+        Texto(c, serial, new Vector2(400f, y + 26f), 16, _serial.Conectados > 0 ? Paleta.Ok : Fraco);
+        if (_serial.IdsRepetidos)
+            Texto(c, "dois controles com o mesmo id: tools/controle_esp.py --definir-id", new Vector2(640f, y + 26f), 16, Paleta.Alerta);
+        else
+            Texto(c, $"câmera: {_modoCamera}", new Vector2(640f, y + 26f), 16, Fraco);
+
+        string[] alertas = { "superaquecido", "parado pela bomba", "teto reduzido" };
+        for (int lane = 0; lane < 2; lane++)
+        {
+            float bx = 24f + lane * 520f, by = y + 64f;
+            Color cor = Paleta.DoJogador(lane);
+            float pwm = (float)_saida.Pwm(lane);
+            string tag = string.IsNullOrEmpty(_saida.Tag(lane)) ? "livre" : _saida.Tag(lane);
+            Texto(c, $"pista {lane + 1}", new Vector2(bx, by), 20, cor, true);
+            Barra(c, new Rect2(bx + 88f, by - 14f, 150f, 14f), pwm, cor);
+            Texto(c, $"pwm {pwm:0.00}", new Vector2(bx + 250f, by), 20, Paleta.Texto);
+            Texto(c, tag, new Vector2(bx + 350f, by), 18, alertas.Any(a => tag.Contains(a)) ? Paleta.Alerta : Fraco);
+        }
+
+        float ly = y + 26f;
+        foreach (var linha in _corrida!.Log.Skip(Math.Max(0, _corrida.Log.Count - 3)))
+        {
+            TextoDir(c, linha.Texto, Tela.X - 24f, ly, 17, Paleta.DoTom(linha.Tom));
+            ly += 22f;
+        }
+    }
+
+    private void TelaAtracao(CanvasItem c)
+    {
+        float cx = Tela.X / 2f;
+        float topo = Tela.Y * 0.2f;
+        TextoCentro(c, "ORBITAL DERBY", cx, topo, 108, Paleta.Texto, true);
+        TextoCentro(c, "Dois cargueiros, um anel de detritos e a ÍRIS-9 vigiando.", cx, topo + 48f, 24, Fraco);
+
+        var r = RectCartaoAtracao();
+        Borda(c, r, Neutra);
+        float x = r.Position.X + 40f, y = r.Position.Y + 58f;
+
+        for (int lane = 0; lane < 2; lane++)
+        {
+            float colx = x + lane * (r.Size.X / 2f - 10f);
+            var fonte = _fontes[lane];
+            Texto(c, lane == 0 ? Cfg.NomeP1 : Cfg.NomeP2, new Vector2(colx, y), 36, Paleta.DoJogador(lane), true);
+            Texto(c, $"[{lane + 1}]  {ConfigControles.Nome(fonte.Tipo)}", new Vector2(colx, y + 38f), 24, Paleta.Texto, true);
+            c.DrawCircle(new Vector2(colx + 6f, y + 62f), 5f, fonte.Pronta ? Paleta.Ok : Paleta.Alerta);
+            Texto(c, fonte.Descricao, new Vector2(colx + 18f, y + 68f), 17, Fraco);
+        }
+
+        string[] regras =
+        {
+            "O acelerador é de MARTELAR: aperte rápido para ir rápido. Segurar não faz nada.",
+            "Ritmo alto demais esquenta o motor, e calor cheio corta por 1,6 s.",
+            $"Cruzar um checkpoint abre a caixa por {Cfg.RoletaOportunidade:0.0} s — aperte AÇÃO para girar.",
+            "A caixa gira sem parar a nave, mas às vezes vem vazia.",
+            "Tiro deixa lento, Bomba para por 2 s, Escudo bloqueia um ataque.",
+            "Tiro e Bomba só pegam o adversário de perto. Longe, o item queima.",
+            $"Vence quem completar {Cfg.VoltasParaVencer} voltas.",
+        };
+        float ry = y + 128f;
+        foreach (var linha in regras)
+        {
+            Texto(c, linha, new Vector2(x, ry), 21, Fraco);
+            ry += 32f;
+        }
+
+        // As chamadas ficam dentro do cartão: soltas sobre a pista clara, sumiam.
+        c.DrawLine(new Vector2(r.Position.X + 40f, r.End.Y - 100f), new Vector2(r.End.X - 40f, r.End.Y - 100f), Neutra, 1f);
+        TextoCentro(c, "Espaço ou AÇÃO para começar", cx, r.End.Y - 56f, 32, Pulsando(), true);
+        TextoCentro(c, "1 e 2 trocam teclado / controle ESP / CPU   ·   C câmera   ·   Q qualidade   ·   F11 tela cheia   ·   Esc sai",
+                    cx, r.End.Y - 22f, 18, Fraco);
+    }
+
+    /// <summary>
+    /// Nome de cada nave e os marcadores de efeito, presos à nave na tela. São
+    /// 2D de propósito: como texto 3D transparente eles não gravam profundidade,
+    /// e o desfoque de distância da câmera os borrava contra o fundo.
+    /// </summary>
+    private void DesenharMarcas(CamadaDesenho c)
+    {
+        if (_corrida is null || _estado == EstadoApp.Atracao) return;
+        for (int lane = 0; lane < 2; lane++)
+        {
+            var an = Ancoras[lane];
+            if (!an.Visivel) continue;
+            var cor = Paleta.DoJogador(lane);
+            float x = an.Pos.X + _desvio[lane];
+            float yNome = an.Pos.Y - 30f;
+            float alfaNome = an.Alfa * _livre[lane];
+            if (alfaNome > 0.01f)
+            {
+                // A seta fica sobre a nave; o nome pode ter sido empurrado para o lado.
+                var ponta = an.Pos + new Vector2(0f, -8f);
+                c.DrawColoredPolygon(new[] { ponta, ponta + new Vector2(-7f, -11f), ponta + new Vector2(7f, -11f) },
+                                     new Color(cor, 0.9f * alfaNome));
+                TextoCentro(c, lane == 0 ? Cfg.NomeP1 : Cfg.NomeP2, x, yNome, 28, new Color(cor, alfaNome), true);
+            }
+
+            int pilha = 0;
+            for (int i = _listaMarcas.Count - 1; i >= 0; i--)
+            {
+                var m = _listaMarcas[i];
+                if (m.Lane != lane) continue;
+                float k = (float)(m.Idade / m.Duracao);
+                float sobe = 1f - MathF.Pow(1f - k, 3f);                        // sai rápido e desacelera
+                float alfa = k < 0.55f ? 1f : 1f - (k - 0.55f) / 0.45f;
+                float estufo = 1f + 0.4f * MathF.Max(0f, 1f - (float)m.Idade / 0.14f);
+                float y = yNome - 36f - sobe * 46f - pilha * 36f;
+                TextoCentro(c, m.Texto, x, y, (int)(34 * estufo), new Color(m.Cor, alfa), true);
+                pilha++;
+            }
+        }
+    }
+
+    private void TelaContagem(CanvasItem c)
+    {
+        int n = (int)Math.Ceiling(_contagem);
+        float fase = (float)(_contagem - Math.Floor(_contagem));
+        int tam = (int)(160 * (1f + 0.35f * fase));
+        TextoCentro(c, n.ToString(), Tela.X / 2f, Tela.Y * 0.47f + tam * 0.3f, tam, Paleta.Texto, true);
+        TextoCentro(c, "martele o acelerador quando aparecer Vai", Tela.X / 2f, Tela.Y * 0.47f + 150f, 24, Fraco);
+    }
+
+    private void TelaResultado(CanvasItem c)
+    {
+        var v = _corrida!.Vencedor;
+        if (v is null) return;
+        float cx = Tela.X / 2f;
+        var r = RectCartaoResultado();
+        TextoCentro(c, $"{v.Nome} venceu", cx, r.Position.Y - 36f, 92, Paleta.DoJogador(v.Lane), true);
+        Borda(c, r, Neutra);
+
+        float x = r.Position.X + 40f, y = r.Position.Y + 70f;
+        var ordem = _corrida.Classificacao();
+        for (int i = 0; i < ordem.Count; i++)
+        {
+            var n = ordem[i];
+            Texto(c, $"{i + 1}º", new Vector2(x, y), 34, Fraco, true);
+            Texto(c, n.Nome, new Vector2(x + 70f, y), 34, Paleta.DoJogador(n.Lane), true);
+            Texto(c, Voltas(Math.Min(n.Voltas, Cfg.VoltasParaVencer)), new Vector2(x + 290f, y - 4f), 24, Paleta.Texto);
+            string fim = n.Terminou ? Tempo(n.TempoFinal) : $"a {n.T * 100:0}% da volta";
+            TextoDir(c, fim, r.End.X - 40f, y - 4f, 26, n.Terminou ? Paleta.Texto : Fraco, n.Terminou);
+            y += 62f;
+        }
+        Texto(c, $"tempo da prova: {Tempo(_corrida.Tempo)}", new Vector2(x, r.End.Y - 96f), 20, Fraco);
+
+        c.DrawLine(new Vector2(r.Position.X + 40f, r.End.Y - 76f), new Vector2(r.End.X - 40f, r.End.Y - 76f), Neutra, 1f);
+        TextoCentro(c, "R, Espaço ou AÇÃO para correr de novo", cx, r.End.Y - 30f, 28, Pulsando(), true);
+    }
+}

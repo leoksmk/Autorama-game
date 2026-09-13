@@ -181,7 +181,10 @@ class App:
         self.fx.desenhar_flash(self.tela)
 
         if self.estado == ATRACAO:
-            self.hud.tela_atracao(self.tela)
+            # O status do driver só existe para o hardware: com os controles
+            # ESP32 o jogador precisa ver, antes de largar, se a placa dele foi
+            # encontrada. No teclado a linha é vazia e nada aparece.
+            self.hud.tela_atracao(self.tela, self.entrada.status())
         elif self.estado == CONTAGEM:
             self.hud.tela_contagem(self.tela, self.contagem)
         elif self.estado == RESULTADO:

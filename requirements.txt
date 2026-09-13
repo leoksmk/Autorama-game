@@ -1,8 +1,10 @@
 # ORBITAL DERBY — dependências
 #
-# Só o pygame. Nada de assets, nada de bibliotecas de hardware: o jogo roda
-# 100% simulado nesta etapa. Os drivers de GPIO/PWM são stubs sem import.
-#
 # pygame-ce é o fork mantido da comunidade e o alvo recomendado; o pygame 2.x
 # original também funciona (foi com ele que o projeto foi testado).
 pygame-ce>=2.4
+
+# OPCIONAL: só para os controles ESP32 pela USB (drivers/serial_driver.py).
+# Sem ele o jogo avisa uma linha e roda no teclado, e a versão WebAssembly
+# nunca chega a importá-lo — não existe porta COM no navegador.
+pyserial>=3.5

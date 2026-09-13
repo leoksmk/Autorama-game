@@ -7,7 +7,7 @@ venv/
 env/
 
 # Ferramentas locais (log gerado por hook, não faz parte do projeto)
-.claude/CONTEXT_LOG.md
+**/.claude/CONTEXT_LOG.md
 
 # Build web: docs/ e o resultado publicado; build/ e cache sao intermediarios
 build/
@@ -18,6 +18,13 @@ web-cache/
 /*.png
 console-*.log
 
+# Godot / .NET
+godot/.godot/
+godot/.mono/
+tests/**/bin/
+tests/**/obj/
+*.user
+
 # Sistema operacional
 Thumbs.db
 desktop.ini
@@ -27,3 +34,6 @@ desktop.ini
 .vscode/
 .idea/
 *.swp
+
+# Log de contexto arquivado pelo hook: mesma coisa que o CONTEXT_LOG.md
+**/.claude/CONTEXT_LOG_ARCHIVE_*.md

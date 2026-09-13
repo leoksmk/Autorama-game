@@ -29,6 +29,11 @@ DESTINO = RAIZ / "docs"
 # O que o jogo precisa para rodar. Nada de build/, docs/, .git/ ou testes.
 FONTES = ("main.py", "game", "drivers")
 
+# serial_driver.py depende do pyserial e fala com portas COM: no navegador não
+# existe nem uma coisa nem outra. O main.py já não o importa lá, então mandá-lo
+# junto seria só peso morto no bundle.
+FORA_DA_WEB = ("__pycache__", "*.pyc", "serial_driver.py")
+
 NOME_ASCII = "orbital-derby"
 
 
@@ -45,7 +50,7 @@ def main() -> int:
             if origem.is_dir():
                 shutil.copytree(
                     origem, projeto / nome,
-                    ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
+                    ignore=shutil.ignore_patterns(*FORA_DA_WEB),
                 )
             else:
                 shutil.copy2(origem, projeto / nome)

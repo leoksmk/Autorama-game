@@ -8,6 +8,10 @@ hardware é trocar a instância passada para o jogo, nada mais.
 
 A detecção de borda (o botão de ação só vale no instante em que é apertado)
 mora aqui, no ButtonEdge, para que nenhum driver precise reimplementá-la.
+
+Os controles ESP32 de verdade estão em `serial_driver.py`, num módulo à parte
+porque dependem do pyserial — que não existe na versão WebAssembly. Este
+arquivo continua importável no navegador.
 """
 
 from __future__ import annotations
@@ -30,8 +34,18 @@ class InputDriver:
     def read(self) -> dict:
         raise NotImplementedError
 
+    def status(self) -> str:
+        """
+        Uma linha para a tela de abertura, ou vazio se não há o que dizer.
+
+        Existe por causa do hardware: com os controles ESP32 o jogador precisa
+        saber, ANTES de largar, se a placa dele foi encontrada. Teclado não tem
+        o que informar e devolve vazio.
+        """
+        return ""
+
     def close(self) -> None:
-        """Libera recursos. No-op para teclado; solta pinos no GPIO."""
+        """Libera recursos. No-op para teclado; fecha as portas COM no serial."""
         return None
 
 
@@ -65,9 +79,40 @@ class KeyboardDriver(InputDriver):
         return {nome: bool(teclas[tecla]) for nome, tecla in self.mapa.items()}
 
 
+class CombinedDriver(InputDriver):
+    """
+    Vários drivers ao mesmo tempo: quem apertar, vale.
+
+    É o padrão de `main.py` — teclado e controles ESP32 juntos. Serve para
+    jogar com um ESP e um teclado enquanto o segundo controle não fica pronto,
+    e para o teclado continuar funcionando se um cabo cair no meio da corrida.
+    """
+
+    def __init__(self, *drivers: InputDriver) -> None:
+        self.drivers = list(drivers)
+
+    def read(self) -> dict:
+        estado = dict(ESTADO_VAZIO)
+        for driver in self.drivers:
+            for nome, valor in driver.read().items():
+                if valor:
+                    estado[nome] = True
+        return estado
+
+    def status(self) -> str:
+        return " · ".join(s for s in (d.status() for d in self.drivers) if s)
+
+    def close(self) -> None:
+        for driver in self.drivers:
+            driver.close()
+
+
 class GpioDriver(InputDriver):
     """
-    STUB. Não importa biblioteca de hardware e não é usado nesta etapa.
+    STUB MORTO. A entrada de hardware deste projeto virou o ESP32 pela USB
+    (`serial_driver.ControleEspDriver`), não GPIO de Raspberry Pi. O que segue
+    é o mapa que existia antes dessa decisão, guardado só como referência para
+    quem quiser mover a entrada de volta para uma placa com pinos.
 
     Mapa de pinos pretendido (BCM), para preencher na montagem:
 
@@ -95,7 +140,8 @@ class GpioDriver(InputDriver):
 
     def __init__(self) -> None:
         raise NotImplementedError(
-            "GpioDriver ainda não implementado. Use KeyboardDriver nesta etapa."
+            "GpioDriver não é o caminho de hardware deste projeto. "
+            "Use KeyboardDriver ou serial_driver.ControleEspDriver."
         )
 
     def read(self) -> dict:

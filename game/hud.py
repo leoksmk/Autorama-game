@@ -333,7 +333,7 @@ class Hud:
 
     # -- telas ---------------------------------------------------------------
 
-    def tela_atracao(self, tela) -> None:
+    def tela_atracao(self, tela, status: str = "") -> None:
         tela.blit(self._fundo_translucido(cfg.LARGURA, cfg.ALTURA, cfg.COR_FUNDO, 200), (0, 0))
 
         cx = cfg.LARGURA // 2
@@ -378,6 +378,11 @@ class Hud:
         extras = "R reinicia" if cfg.NO_NAVEGADOR else "F11 tela cheia · R reinicia · Esc sai"
         self._texto(tela, self.f_mini, extras, cx, y + h + 58,
                     cfg.COR_TEXTO_FRACO, centro=True)
+
+        # Estado dos controles de hardware. Vazio no teclado, e aí nem aparece.
+        if status:
+            self._texto(tela, self.f_mini, status, cx, y + h + 80,
+                        cfg.COR_TEXTO_FRACO, centro=True)
 
     def tela_contagem(self, tela, restante: float) -> None:
         cx = cfg.LARGURA // 2
