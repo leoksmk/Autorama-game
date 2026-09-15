@@ -175,9 +175,33 @@ versões do jogo falam com eles**: a 3D pela `GerenteSerial` em C#, a 2D pelo
 `drivers/serial_driver.py`. O protocolo, a descoberta das portas e a regra de
 quem é qual nave são os mesmos nos dois lados.
 
+A ordem abaixo é a de quem monta do zero: comprar, ligar, preparar o PC,
+gravar, dizer qual controle é qual nave e jogar. O teclado continua valendo o
+tempo todo — dá para montar um controle só e jogar contra alguém no teclado.
+
+### O que comprar
+
+Por controle (para duas pessoas, o dobro):
+
+| Peça | Qtd | Observação |
+| --- | --- | --- |
+| **ESP32-C3 SuperMini** | 1 | a placa testada neste projeto |
+| Botão (tátil, arcade ou microswitch) | 2 | um de acelerador, um de ação |
+| Fio | 3 | dois de sinal e um de GND, que os dois botões dividem |
+| Cabo USB-C **de dados** | 1 | cabo só de carga não cria porta COM — o PC nem vê a placa |
+
+E ferro de solda, ou jumpers se a placa vier com os pinos soldados.
+
 ### Ligação
 
-O controle deste projeto usa a **ESP32-C3 SuperMini**.
+```text
+  pino 3  ────  botão ACELERADOR  ──┐
+                                    ├──  GND
+  pino 5  ────  botão AÇÃO        ──┘
+```
+
+Cada botão vai **entre o pino e o GND**, sem resistor: o firmware liga o
+pull-up interno. Os dois podem dividir o mesmo furo de GND.
 
 | Placa | Acelerador | Ação |
 | --- | --- | --- |
@@ -185,62 +209,75 @@ O controle deste projeto usa a **ESP32-C3 SuperMini**.
 | ESP32 clássico (DevKit) | GPIO 25 | GPIO 26 |
 | ESP32-S2 / S3 / C6 | GPIO 3 | GPIO 5 |
 
-Estes números saem dos `#define` no alto do `orbital_controle.ino` — se os
-switches estiverem soldados em outros pinos, troque lá. Pino errado não dá erro
-de compilação nem de gravação: o acelerador só não responde. O acelerador já
-morou no pino 4 (versões 1.0, 1.2 e 2.0 do firmware); a tabela acima e os
-`#define` têm de andar juntos.
+Três armadilhas, todas silenciosas — nenhuma dá erro, o botão só não responde:
 
-### O botão não responde
+- **Use o número impresso na placa, não conte os furos.** A ordem física dos
+  pinos muda entre fabricantes da SuperMini, e contando à mão é fácil cair no
+  3V3 achando que é o pino 3.
+- **Botão tátil de 4 pernas:** as pernas vêm ligadas em pares por dentro
+  (1-2 e 3-4), e apertar liga um par ao outro. Use uma perna de **cada** par
+  — por exemplo 1 e 3. Soldado em 1 e 2, o botão nunca muda de estado.
+- **Pinos a evitar na C3:** 2, 8 e 9 (definem o modo de boot; o 8 é o LED) e
+  20/21 (UART).
 
-Não adivinhe o pino — pergunte à placa:
+Os números saem dos `#define` no alto do `orbital_controle.ino`. Se os botões
+já estiverem soldados em outros pinos, troque lá e grave de novo.
 
-```bash
-python tools/controle_esp.py --achar-pino COM9    # aperte durante o teste
-python tools/controle_esp.py --diagnostico COM9   # nível cru dos pinos, ao vivo
-```
+O LED azul da SuperMini (GPIO 8) acende enquanto qualquer botão está apertado,
+então dá para conferir a fiação só com a placa ligada numa tomada USB.
 
-A varredura passa por todos os pinos livres duas vezes: com pull-up procurando
-quem vai a **zero** (switch no GND, o certo) e com pull-down procurando quem vai
-a **um** (switch no 3V3, invertido). O segundo passo existe porque o primeiro é
-cego para a ligação invertida: apertar empurra o pino para onde ele já estava.
+### Preparar o PC (uma vez)
 
-Só conta o pino que **muda** durante o teste. Pino ativo em 100% das amostras
-está preso num trilho — na C3, o GPIO 2 e o GPIO 9 sempre aparecem assim no
-passo do pull-down, porque a placa tem pull-up de fábrica neles. O firmware
-marca e descarta esses sozinho.
+1. **Arduino IDE 2** — <https://www.arduino.cc/en/software>. O `arduino-cli`
+   vem junto.
+2. **Pacote do ESP32:** na IDE, *Ferramentas → Placa → Gerenciador de Placas*,
+   procure `esp32` e instale **esp32 by Espressif Systems**. Não precisa de URL
+   adicional. Testado com a versão **3.3.11**. Pelo terminal:
 
-O LED azul acompanha a varredura ao vivo: acende no instante em que algum pino
-reage. Dá para achar o pad certo encostando o fio, sem olhar a tela.
+   ```bash
+   arduino-cli core install esp32:esp32
+   ```
 
-Nenhum pino reagindo nas duas polaridades encerra o assunto software. Sobra:
-solda fria, fio rompido, pad errado, ou os dois fios no mesmo par interno do
-switch — num tátil de 4 pernas, 1-2 e 3-4 já saem ligados de fábrica, e é
-preciso usar uma perna de **cada** par. A prova final é o multímetro em
-continuidade nas duas pernas: solto abre, apertado fecha.
+3. **Python 3 e pyserial**, para as ferramentas de bancada:
 
-Cada botão vai **entre o pino e o GND**, sem resistor: o firmware liga o
-pull-up interno. O debounce é por estado estável (5 ms). O LED da placa acende
-enquanto qualquer botão está apertado, o que permite testar a fiação sem PC —
-na SuperMini é o LED azul (GPIO 8). Na C3, não use os pinos 2, 8 e 9 (definem
-o modo de boot) nem 20/21 (UART).
+   ```bash
+   pip install pyserial
+   ```
+
+4. **Driver USB: não precisa.** A SuperMini usa a USB do próprio chip e o
+   Windows 10/11 a reconhece sozinho como *Dispositivo Serial USB*. Driver
+   CP210x/CH340 só é necessário em placas com conversor separado, como o ESP32
+   clássico.
 
 ### Gravar o firmware
 
-Para a SuperMini, a placa certa é **Nologo ESP32C3 Super Mini** (com esse nome
-na Arduino IDE; no terminal, pelo FQBN abaixo). Troque `COM9` pela porta da sua
-placa — `arduino-cli board list` mostra.
+**Pela Arduino IDE:** abra `firmware/orbital_controle/orbital_controle.ino`,
+escolha *Ferramentas → Placa → esp32 → **Nologo ESP32C3 Super Mini***, escolha
+a porta e clique em *Carregar*.
+
+**Pelo terminal** (troque `COM9` pela porta da sua placa — `arduino-cli board
+list` mostra):
 
 ```bash
 arduino-cli compile --fqbn esp32:esp32:nologo_esp32c3_super_mini firmware/orbital_controle
 arduino-cli upload  --fqbn esp32:esp32:nologo_esp32c3_super_mini -p COM9 firmware/orbital_controle
 ```
 
-**Não use a genérica "ESP32C3 Dev Module".** A SuperMini não tem conversor
-USB-serial (a porta COM é a USB do próprio C3), e a genérica vem com "USB CDC
-On Boot" desligado: o firmware gravaria sem erro, o `Serial` sairia pelos pinos
-20/21 e a porta ficaria muda. Para não cair nisso, o firmware se recusa a
-compilar para C3 com o CDC desligado — o `#error` diz o que fazer.
+Para conferir, com a placa plugada:
+
+```bash
+python tools/controle_esp.py
+#   COM9     CONTROLE ORBITAL — id 1 (ÍON), firmware 1.3
+```
+
+**Feche o jogo e o Monitor Serial da IDE antes de gravar.** O jogo segura a
+porta do controle enquanto está aberto, e a gravação falha com *Acesso negado*.
+
+**Não use a placa genérica "ESP32C3 Dev Module".** A SuperMini não tem
+conversor USB-serial (a porta COM é a USB do próprio C3), e a genérica vem com
+"USB CDC On Boot" desligado: o firmware gravaria sem erro, o `Serial` sairia
+pelos pinos 20/21 e a porta ficaria muda. Para não cair nisso, o firmware se
+recusa a compilar para C3 com o CDC desligado — o `#error` diz o que fazer.
 
 Se a gravação não conectar: segure **BOOT**, aperte e solte **RESET**, solte
 BOOT e grave de novo; no fim, aperte RESET para o firmware rodar.
@@ -258,7 +295,6 @@ O id fica gravado no próprio ESP: **1 = ÍON, 2 = ÍGNIS**. Todo controle sai d
 firmware como 1; o segundo precisa ser trocado uma vez:
 
 ```bash
-pip install pyserial
 python tools/controle_esp.py                       # lista os controles plugados
 python tools/controle_esp.py --definir-id COM6 2   # este vira ÍGNIS
 python tools/controle_esp.py --monitor COM6        # mostra os apertos ao vivo
@@ -268,6 +304,47 @@ O jogo acha os controles sozinho: varre as portas COM a cada 1,5 s, e a porta
 que responde `HELLO ORBITAL` vira controle. A nave vem do id, não do número da
 COM — trocar o cabo de entrada USB não troca a nave. Dois ESP com o mesmo id
 ainda funcionam (o segundo assume a nave livre), mas o HUD avisa.
+
+### Jogar com os controles
+
+**3D:** na tela de abertura, aperte `1` (ÍON) e `2` (ÍGNIS) até aparecer
+*controle ESP*. A escolha fica salva para as próximas vezes. Ou direto pelo
+terminal:
+
+```powershell
+cd godot
+.\jogar.bat --p1=controle --p2=controle
+```
+
+**2D:** `python main.py` já liga teclado e controles juntos; `--esp` usa só os
+controles. Detalhes em [Controles ESP32 na 2D](#controles-esp32-na-2d).
+
+### O botão não responde
+
+Não adivinhe o pino — pergunte à placa:
+
+```bash
+python tools/controle_esp.py --achar-pino COM9    # aperte durante o teste
+python tools/controle_esp.py --diagnostico COM9   # nível cru dos pinos, ao vivo
+```
+
+A varredura passa por todos os pinos livres duas vezes: com pull-up procurando
+quem vai a **zero** (botão no GND, o certo) e com pull-down procurando quem vai
+a **um** (botão no 3V3, invertido). O segundo passo existe porque o primeiro é
+cego para a ligação invertida: apertar empurra o pino para onde ele já estava.
+
+Só conta o pino que **muda** durante o teste. Pino ativo em 100% das amostras
+está preso num trilho — na C3, o GPIO 2 e o GPIO 9 sempre aparecem assim no
+passo do pull-down, porque a placa tem pull-up de fábrica neles. O firmware
+marca e descarta esses sozinho.
+
+O LED azul acompanha a varredura ao vivo: acende no instante em que algum pino
+reage. Dá para achar o furo certo encostando o fio, sem olhar a tela.
+
+Nenhum pino reagindo nas duas polaridades encerra o assunto software. Sobra:
+solda fria, fio rompido, furo errado, as duas pernas no mesmo par do botão
+tátil, ou botão queimado. A prova final é o multímetro em continuidade nas duas
+pernas: solto abre, apertado fecha.
 
 ### Protocolo
 
@@ -283,12 +360,12 @@ ainda funcionam (o segundo assume a nave livre), mas o HUD avisa.
 | PC → ESP | `ID n` | grava o id (1 ou 2) |
 | PC → ESP | `M <duty>` | reservado: PWM daquela pista, 0..1000. O jogo não manda e o firmware ignora |
 | PC → ESP | `D <0\|1>` | liga/desliga o diagnóstico: nível cru dos pinos a cada 500 ms |
-| PC → ESP | `VARRER` | acha em que GPIO o switch está ligado (trava o loop por ~11 s) |
+| PC → ESP | `VARRER` | acha em que GPIO o botão está ligado (trava o loop por ~11 s) |
 | ESP → PC | `[ctrl] ...` | resposta do diagnóstico e da varredura |
 
-O jogo **ignora em silêncio** toda linha que não reconhece — é o que faz o
-mesmo código servir aos dois firmwares e aguentar o log de boot da ROM do ESP,
-que sai grudado antes da apresentação.
+O jogo **ignora em silêncio** toda linha que não reconhece. É o que o deixa
+aguentar o log de boot da ROM do ESP, que sai grudado antes da apresentação, e
+as linhas `[ctrl]` do diagnóstico.
 
 Sem sinal de vida por 1,6 s o controle é dado como desconectado. O jogo abre a
 porta com DTR e RTS desligados, porque em muitas placas eles resetam o ESP. O

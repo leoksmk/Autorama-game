@@ -80,7 +80,9 @@ def descrever(hello: str) -> str:
 def listar() -> int:
     portas = list(list_ports.comports())
     if not portas:
-        print("Nenhuma porta COM encontrada. O ESP está plugado? O driver USB (CP210x/CH340) está instalado?")
+        print("Nenhuma porta COM encontrada. O ESP está plugado com um cabo USB de DADOS?")
+        print("(Cabo só de carga não cria porta.) A SuperMini não precisa de driver;")
+        print("placas com conversor separado, como o ESP32 clássico, precisam do CP210x ou CH340.")
         return 1
     achou = 0
     for p in portas:
