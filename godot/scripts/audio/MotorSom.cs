@@ -45,12 +45,18 @@
 //      aqui é lento: LFO de 0,27 Hz e gêmea 0,18% acima.
 //
 // O brilho cresce mudando o EXPOENTE do decaimento das parciais, não o volume
-// delas: o motor abre sem nunca gritar. Medido no talo, 21% da energia fica
-// acima de 2 kHz, contra 44% da versão estridente.
+// delas: o motor abre sem nunca gritar. Medido no talo, 10% da energia fica
+// acima de 2 kHz na voz PROPULSOR e 17% na CAÇA, contra 44% de uma versão
+// antiga que soava estridente.
 //
 // Cada pista tem sua voz (ÍON mais agudo à esquerda, ÍGNIS mais grave à
 // direita) e escreve direto nos dois canais — sem posicionamento 3D: numa
 // cabine de autorama o que importa é cada jogador achar o próprio motor.
+//
+// Os NÚMEROS de tudo isso moram em ReceitaMotor, não aqui: esta é a máquina, e
+// cada receita é uma voz que ela sabe tocar (PROPULSOR, grave e fluido; CAÇA,
+// agudo e uivante). Trocar de voz em corrida não passa por aqui nem custa
+// recompilação — é a tecla N.
 
 using System;
 using Godot;
@@ -139,6 +145,9 @@ public sealed class VozMotor
     /// <summary>Quanto do golpe sobra a cada amostra (constante de tempo de ~60 ms).</summary>
     private const double GolpeDecai = 0.99948;
 
+    /// <summary>Os números que definem esta voz. Ver ReceitaMotor.</summary>
+    private readonly ReceitaMotor _r;
+
     private readonly double _tom;
 
     /// <summary>
@@ -154,7 +163,7 @@ public sealed class VozMotor
     // começaria um estalo novo. As parciais saem todas de _fase (multiplicar
     // por um inteiro não quebra na virada da volta), mas a sub-oitava e a voz
     // gêmea precisam das suas.
-    private double _faseSub, _faseGemea, _fLfo;
+    private double _faseSub, _faseGemea, _faseFm, _fLfo, _fUivo, _fBalanco;
     private Filtro _lp, _lpAr, _fmt1, _fmt2, _fmt3;
     private int _conta;
 
@@ -179,13 +188,14 @@ public sealed class VozMotor
     private double _golpe;        // envelope do transiente de clique
     private double _crepita;      // ruído de motor morrendo
 
-    public VozMotor(int lane)
+    public VozMotor(int lane, ReceitaMotor receita)
     {
+        _r = receita;
         _tom = Banco.Tom(lane);
         _cor = 0.5 + 0.5 * _tom;
-        // ~3,1 ms: ressonâncias de casco a cada ~320 Hz. Dividir pela cor da
-        // pista dá a cada nave um corpo de tamanho diferente.
-        _cascoAtraso = (int)(Onda.Taxa * 0.0031 / _cor);
+        // Ressonâncias de casco a cada ~1/atraso Hz. Dividir pela cor da pista
+        // dá a cada nave um corpo de tamanho diferente.
+        _cascoAtraso = Math.Clamp((int)(Onda.Taxa * _r.CascoMs * 0.001 / _cor), 1, Casco - 1);
         _rng = new Random(9001 + lane);
     }
 
@@ -237,25 +247,37 @@ public sealed class VozMotor
             // O corte acompanha o esforço: é o que faz o motor "abrir". Q de
             // 0,7 não tem pico nenhum — ele só tira o topo, sem apitar. O tiro
             // fecha o corte: a nave segue andando, mas soa presa.
-            double corte = (1800.0 + 4500.0 * e + 1100.0 * _burn) * (1.0 - 0.45 * _abafar) * _cor;
+            double corte = (_r.CorteBase + _r.CorteGanho * e + _r.CorteBurn * _burn)
+                           * (1.0 - 0.45 * _abafar) * _cor;
             _lp.Ajustar(corte, 0.7);
-            _lpAr.Ajustar((1100.0 + 3200.0 * e) * (0.75 + 0.5 * _turb) * _cor, 0.7);
+            _lpAr.Ajustar((_r.ArCorteBase + _r.ArCorteGanho * e) * (0.75 + 0.5 * _turb) * _cor, 0.7);
 
             // Formantes. Abrem um pouco com o esforço, como uma garganta, mas
             // continuam presos a frequências próprias — é essa independência
             // da afinação que cria o caráter. Q moderado de propósito: acima
             // de ~3 eles voltariam a apitar.
-            _fmt1.Ajustar(290.0 * _cor * (1.0 + 0.18 * e), 2.2, banda: true);
-            _fmt2.Ajustar(760.0 * _cor * (1.0 + 0.30 * e), 2.0, banda: true);
-            _fmt3.Ajustar(1750.0 * _cor * (1.0 + 0.35 * e + 0.30 * _burn), 1.8, banda: true);
+            // Balanço: as três frequências passeiam juntas, devagar. É o que
+            // faz o timbre parecer uma garganta em movimento em vez de um
+            // filtro parado. No propulsor a profundidade é zero.
+            double bal = 1.0;
+            if (_r.FmtBalancoProf > 0.0)
+            {
+                _fBalanco += _r.FmtBalancoHz / Onda.Taxa * PassoCoef;
+                if (_fBalanco >= 1.0) _fBalanco -= Math.Floor(_fBalanco);
+                bal += _r.FmtBalancoProf * (0.3 + 0.7 * e) * Tabela.Sen(_fBalanco);
+            }
+            _fmt1.Ajustar(_r.FmtHz[0] * _cor * bal * (1.0 + _r.FmtAbre[0] * e), _r.FmtQ[0], banda: true);
+            _fmt2.Ajustar(_r.FmtHz[1] * _cor * bal * (1.0 + _r.FmtAbre[1] * e), _r.FmtQ[1], banda: true);
+            _fmt3.Ajustar(_r.FmtHz[2] * _cor * bal * (1.0 + _r.FmtAbre[2] * e + 0.30 * _burn),
+                          _r.FmtQ[2], banda: true);
 
             // Pesos das parciais: 1/h^p sobre a série da sub-oitava, com as
             // ímpares (o rosnado) pesando `growl`. Um Math.Pow por parcial por
             // amostra seria o item mais caro do jogo inteiro, e tanto o
             // expoente quanto o rosnado mudam devagar — recalcular junto com o
             // filtro é exato o bastante.
-            double p = 1.60 - 0.55 * e - 0.15 * _calor;
-            double growl = 0.28 + 0.42 * e;
+            double p = _r.PBase - _r.PGanho * e - 0.15 * _calor;
+            double growl = _r.GrowlBase + _r.GrowlGanho * e;
             _somaPesos = 0.0;
             _nAtivas = 1;
             for (int n = 1; n <= NParciais; n++)
@@ -273,15 +295,26 @@ public sealed class VozMotor
 
         // Respiração: um LFO bem lento na afinação. É o que tira o som de
         // "parado" sem gerar o batimento rápido que o ouvido acha áspero.
-        _fLfo += 0.27 / Onda.Taxa;
+        _fLfo += _r.RespiraHz / Onda.Taxa;
         if (_fLfo >= 1.0) _fLfo -= 1.0;
-        double deriva = 1.0 + 0.0035 * Tabela.Sen(_fLfo)
+        double deriva = 1.0 + _r.RespiraProf * Tabela.Sen(_fLfo)
                             + 0.004 * _calor * Tabela.Sen(_fLfo * 23.0);
+
+        // Uivo: o vibrato rápido e fundo das vozes de caça. Fica em zero no
+        // propulsor, onde só a respiração lenta toca a afinação.
+        if (_r.UivoProf > 0.0)
+        {
+            _fUivo += _r.UivoHz / Onda.Taxa;
+            if (_fUivo >= 1.0) _fUivo -= 1.0;
+            // Fundo quando o motor força, quase parado em marcha lenta — o
+            // grito é do esforço, não do repouso.
+            deriva += _r.UivoProf * (0.35 + 0.65 * e) * Tabela.Sen(_fUivo);
+        }
 
         // O golpe empurra a afinação para cima e volta: o motor "engole" o
         // combustível a cada aperto. Isso faz o ritmo do martelar aparecer sem
         // nenhum estalo somado por cima.
-        double f = (34.0 + 118.0 * e) * _tom * deriva * (1.0 + 0.022 * _golpe);
+        double f = (_r.FreqBase + _r.FreqGanho * e) * _tom * deriva * (1.0 + 0.022 * _golpe);
         double fb = f * 0.5;   // a série inteira é construída sobre a sub-oitava
 
         _faseSub += fb / Onda.Taxa;
@@ -309,37 +342,48 @@ public sealed class VozMotor
         // não aspereza. Só as duas primeiras parciais, que basta.
         double gemea = (Tabela.Sen(_faseGemea) + Tabela.Sen(_faseGemea * 2.0) * 0.4) * 0.26;
 
+        // Inarmonicidade: um oscilador numa razão NÃO inteira, que por isso
+        // não cai em cima de nenhum harmônico. É o brilho metálico e "errado"
+        // de máquina que não queima combustível. Dose pequena: acima de ~0,3
+        // o motor vira sino desafinado.
+        if (_r.FmIndice > 0.0)
+        {
+            _faseFm += f * _r.FmRazao / Onda.Taxa;
+            if (_faseFm >= 1.0) _faseFm -= Math.Floor(_faseFm);
+            corpo += Tabela.Sen(_faseFm) * _r.FmIndice;
+        }
+
         // Ar turbulento: o corte do ruído passeia sozinho, então o sopro nunca
         // fica parado. Ruído estático soa como chiado de rádio; ruído que se
         // mexe soa como alguma coisa queimando lá dentro.
         double ar = _lpAr.Passar(_rng.NextDouble() * 2.0 - 1.0)
-                    * (0.09 + 0.22 * e) * (1.0 + 0.7 * _burn);
+                    * (_r.ArBase + _r.ArGanho * e) * (1.0 + _r.ArBurn * _burn);
 
-        double seco = (corpo + gemea) * 0.68 + ar;
+        double seco = (corpo + gemea) * _r.Corpo + ar;
 
         // FORMANTES. Três ressonâncias em frequências FIXAS, que não seguem a
         // afinação. É o que separa "sintetizador tocando uma nota" de "coisa
         // com corpo": conforme o motor sobe, os harmônicos atravessam os
         // formantes e o timbre se transforma sozinho. É o equivalente sintético
         // do que se consegue processando um bicho de verdade.
-        double fmt = _fmt1.Passar(seco) * 0.50
-                   + _fmt2.Passar(seco) * 0.36
-                   + _fmt3.Passar(seco) * (0.13 + 0.13 * _burn);
+        double fmt = _fmt1.Passar(seco) * _r.FmtGanho[0]
+                   + _fmt2.Passar(seco) * _r.FmtGanho[1]
+                   + _fmt3.Passar(seco) * (_r.FmtGanho[2] + _r.FmtGanhoBurn * _burn);
 
-        double bruto = seco * 0.60 + fmt;
+        double bruto = seco * _r.Seco + fmt;
 
         // CASCO. Um atraso de 3 ms realimentado: ressonâncias fixas a cada
         // ~320 Hz que dão a impressão de metal em volta do propulsor. É o mesmo
         // truque do disparo, aplicado de forma contínua.
         double atras = _casco[(_cascoPos + Casco - _cascoAtraso) % Casco];
-        _casco[_cascoPos] = bruto + atras * 0.40;
+        _casco[_cascoPos] = bruto + atras * _r.CascoRealim;
         _cascoPos = (_cascoPos + 1) % Casco;
-        bruto += atras * 0.30;
+        bruto += atras * _r.CascoMix;
 
         // Saturação ANTES do filtro: ela dá liga entre as camadas, e os
         // harmônicos que inventa são aparados logo em seguida. Na
         // pós-combustão ela aperta mais — o motor rasga.
-        double drive = 1.1 + 0.5 * e + 0.25 * _calor + 0.9 * _burn;
+        double drive = _r.DriveBase + _r.DriveGanho * e + 0.25 * _calor + _r.DriveBurn * _burn;
         bruto = Math.Tanh(bruto * drive) / Math.Tanh(drive);
 
         double s = _lp.Passar(bruto);
@@ -358,19 +402,21 @@ public sealed class VozMotor
 
         // Marcha lenta: mesmo sem aperto nenhum o motor respira, senão a nave
         // parada na largada soa quebrada em vez de parada.
-        return s * _vivo * (0.16 + 0.84 * e) * 0.52;
+        return s * _vivo * (0.16 + 0.84 * e) * _r.Volume;
     }
 }
 
 public partial class MotorSom : AudioStreamPlayer
 {
-    private readonly VozMotor _voz;
+    private readonly int _lane;
+    private VozMotor _voz;
     private readonly double _ganhoEsq, _ganhoDir;
     private AudioStreamGeneratorPlayback? _saida;
 
-    public MotorSom(int lane)
+    public MotorSom(int lane, PerfilMotor perfil)
     {
-        _voz = new VozMotor(lane);
+        _lane = lane;
+        _voz = new VozMotor(lane, ReceitaMotor.De(perfil));
 
         double pan = Banco.Pan(lane);
         _ganhoEsq = Math.Sqrt((1.0 - pan) * 0.5);
@@ -395,6 +441,13 @@ public partial class MotorSom : AudioStreamPlayer
     public void Definir(double esforco, double calor, bool travado, bool lento, bool ligado, bool clique) =>
         _voz.Definir(esforco, calor, travado, lento, ligado, clique);
 
+    /// <summary>
+    /// Troca a voz sem parar o motor. A voz nova nasce em silêncio e sobe
+    /// junto com o esforço; trocar no meio da corrida dá um corte seco de
+    /// menos de um quadro, o que é o preço de poder comparar as duas ao vivo.
+    /// </summary>
+    public void Trocar(PerfilMotor perfil) => _voz = new VozMotor(_lane, ReceitaMotor.De(perfil));
+
     public override void _Process(double delta)
     {
         if (_saida is null)
@@ -418,11 +471,11 @@ public partial class MotorSom : AudioStreamPlayer
     /// e ouvida: marcha lenta, aceleração com os golpes do martelar, calor
     /// subindo até o corte, e a volta com o teto reduzido pelo tiro.
     /// </summary>
-    public static Onda Varredura(int lane)
+    public static Onda Varredura(int lane, PerfilMotor perfil)
     {
         const double dur = 11.0;
         var o = new Onda(dur);
-        var voz = new VozMotor(lane);
+        var voz = new VozMotor(lane, ReceitaMotor.De(perfil));
         double proximoClique = 0.0;
 
         for (int i = 0; i < o.N; i++)

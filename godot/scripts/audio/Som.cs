@@ -87,6 +87,7 @@ public partial class Som : Node, IEfeitos
     private readonly double[] _desdeCliqueAntes = new double[2];
     private readonly Item[] _faceAntes = new Item[2];
     private readonly EstadoRoleta[] _roletaAntes = new EstadoRoleta[2];
+    private PerfilMotor _perfil = PerfilMotor.Propulsor;
     private EstadoApp _estadoAntes = EstadoApp.Atracao;
     private int _liderAntes = -1;
     private double _dt = 1.0 / 60.0;
@@ -110,7 +111,7 @@ public partial class Som : Node, IEfeitos
 
         for (int lane = 0; lane < 2; lane++)
         {
-            var m = new MotorSom(lane);
+            var m = new MotorSom(lane, _perfil);
             AddChild(m);
             _motores[lane] = m;
 
@@ -403,6 +404,25 @@ public partial class Som : Node, IEfeitos
     // -- interface -----------------------------------------------------------
 
     public void Interface() => Tocar(_clique, -6f);
+
+    /// <summary>Qual voz os motores estão usando, e como ela se chama na tela.</summary>
+    public PerfilMotor Perfil => _perfil;
+
+    public string NomeDoPerfil => ReceitaMotor.NomeDe(_perfil);
+
+    /// <summary>
+    /// Troca a voz dos dois motores ao vivo. Existe para comparar as duas sem
+    /// reabrir o jogo — trocar no meio de uma corrida é justamente o momento
+    /// em que a diferença fica óbvia.
+    /// </summary>
+    public void DefinirPerfil(PerfilMotor perfil)
+    {
+        _perfil = perfil;
+        foreach (var m in _motores)
+            m?.Trocar(perfil);
+    }
+
+    public void ProximoPerfil() => DefinirPerfil(ReceitaMotor.Proximo(_perfil));
 
     /// <summary>Silêncio geral. A corrida continua — só a mesa emudece.</summary>
     public void AlternarSurdina()

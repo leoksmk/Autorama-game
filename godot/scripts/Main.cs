@@ -14,6 +14,7 @@
 //     --captura=<pasta>            roteiro de verificação: tira capturas e sai
 //     --captura=rajada:<pasta>     60 fotos seguidas na câmera de perseguição
 //     --sair-em=<segundos>         fecha sozinho (teste de fumaça)
+//     --motor=propulsor|caca       voz dos motores (N troca durante o jogo)
 //     --som-wav=<pasta>            grava o banco de sons em .wav e sai
 
 using System;
@@ -59,6 +60,7 @@ public partial class Main : Node3D
     private bool _demo;
     private Captura? _captura;
     private string? _exportarSom;
+    private PerfilMotor _perfilMotor = PerfilMotor.Propulsor;
 
     public override void _Ready()
     {
@@ -92,6 +94,9 @@ public partial class Main : Node3D
         camada.AddChild(_hud);
 
         _tipos = ConfigControles.Carregar();
+        // A voz salva entra antes dos argumentos, para que --motor= possa
+        // sobrepor a escolha guardada sem gravá-la por cima.
+        _perfilMotor = ConfigMotor.Carregar();
         LerArgumentos(OS.GetCmdlineUserArgs());
 
         _serial.Iniciar();
@@ -100,6 +105,7 @@ public partial class Main : Node3D
 
         _fx.Configurar(_corrida, _naves, _camera);
         _som.Configurar(_corrida);
+        _som.DefinirPerfil(_perfilMotor);
         _fx.Marcador = _hud.Marcar;
         _hud.Ancoras = _ancoras;
         _hud.Configurar(_corrida, _saida, _fontes, _serial);
@@ -148,6 +154,11 @@ public partial class Main : Node3D
                     break;
                 case "som-wav":
                     _exportarSom = string.IsNullOrWhiteSpace(valor) ? OS.GetUserDataDir() : valor;
+                    break;
+                case "motor":
+                    _perfilMotor = valor.ToLowerInvariant() is "caca" or "caça" or "nave"
+                        ? PerfilMotor.Caca
+                        : PerfilMotor.Propulsor;
                     break;
             }
         }
@@ -278,7 +289,8 @@ public partial class Main : Node3D
         AtualizarAncoras();
         _hud.Atualizar(dt, _estado, _contagem,
             $"{CameraRig.NomeDoModo(_camera.ModoAtual)} (C) · qualidade {Ambiente.Nome(_qualidade)} (Q)"
-            + $" · som {(_som.EmSurdina ? "mudo" : "ligado")} (M)");
+            + $" · som {(_som.EmSurdina ? "mudo" : "ligado")} (M)"
+            + $" · motor {_som.NomeDoPerfil} (N)");
 
         _captura?.Passo(delta);
     }
@@ -347,6 +359,13 @@ public partial class Main : Node3D
                 // Surdina geral. A corrida e os carrinhos seguem: numa feira
                 // dá para calar o jogo sem parar a partida de ninguém.
                 _som.AlternarSurdina();
+                break;
+            case Key.N:
+                // Troca a voz dos motores no meio da corrida: é comparando as
+                // duas com a mesma nave na mesma curva que se decide qual fica.
+                _som.ProximoPerfil();
+                _perfilMotor = _som.Perfil;
+                ConfigMotor.Salvar(_perfilMotor);
                 break;
             case Key.Space:
                 if (_estado is EstadoApp.Atracao or EstadoApp.Resultado)

@@ -61,8 +61,14 @@ public static class Exportar
         // O motor não sai do Banco: ele é sintetizado ao vivo. Para poder
         // ouvi-lo aqui, esta varredura desenha o que ele faria com o esforço
         // subindo de 0 a 1 e voltando — é o gesto do jogador martelando.
-        fila.Add(("motor_ion_varredura", MotorSom.Varredura(0), Banco.Pan(0)));
-        fila.Add(("motor_ignis_varredura", MotorSom.Varredura(1), Banco.Pan(1)));
+        // Uma varredura por voz e por pista: é assim que as duas vozes ficam
+        // lado a lado na pasta, para comparar ouvindo em sequência.
+        foreach (PerfilMotor perfil in new[] { PerfilMotor.Propulsor, PerfilMotor.Caca })
+        {
+            string v = perfil == PerfilMotor.Caca ? "caca" : "propulsor";
+            fila.Add(($"motor_{v}_ion", MotorSom.Varredura(0, perfil), Banco.Pan(0)));
+            fila.Add(($"motor_{v}_ignis", MotorSom.Varredura(1, perfil), Banco.Pan(1)));
+        }
 
         foreach (var (nome, onda, pan) in fila)
             Salvar(Path.Combine(pasta, nome + ".wav"), onda, pan);

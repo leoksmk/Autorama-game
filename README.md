@@ -61,6 +61,8 @@ chamando o executável do Godot, elas vão depois de `--`:
 | `--captura=<pasta>` | roteiro fixo que salva 12 capturas de tela e fecha |
 | `--captura=rajada:<pasta>` | 60 fotos seguidas na câmera de perseguição |
 | `--sair-em=<s>` | fecha sozinho depois de *s* segundos |
+| `--motor=` | voz dos motores: `propulsor` (padrão) ou `caca` |
+| `--som-wav=<pasta>` | grava o banco de sons em `.wav` e fecha |
 
 ### Teclas
 
@@ -70,7 +72,7 @@ chamando o executável do Godot, elas vão depois de `--`:
 | ÍGNIS (pista 2) | `L` | `K` |
 
 `Espaço` começa · `R` reinicia · `C` troca a câmera · `Q` troca a qualidade ·
-`M` muta o som · `F11` tela cheia · `F3` FPS ·
+`M` muta o som · `N` troca a voz dos motores · `F11` tela cheia · `F3` FPS ·
 `Esc` sai
 
 Na tela de abertura, **`1` e `2` trocam a entrada de cada nave** entre teclado,
@@ -137,18 +139,65 @@ de verdade, que era como se fazia som de nave na era analógica. Um atraso de
 3 ms realimentado acrescenta o **casco** metálico, e acima de 62% de esforço
 entra a **pós-combustão**: o motor muda de estado, não só de volume.
 
-Do parado ao talo o centroide vai de 43 Hz a 1069 Hz e o volume sobe cinco
-vezes — a transformação é o que dá emoção a martelar. Nada disso reintroduz
+Do parado ao talo o centroide vai de 42 Hz a 647 Hz e o volume sobe oito vezes
+— a transformação é o que dá emoção a martelar. Nada disso reintroduz
 estridência, porque quatro regras são respeitadas: sem aliasing (band-limit em
 15 kHz), sem ressonância estreita (passa-baixa com Q 0,7, formantes largos),
-saturação *antes* do filtro e nenhum batimento rápido. No talo, 21% da energia
+saturação *antes* do filtro e nenhum batimento rápido. No talo, 10% da energia
 fica acima de 2 kHz, contra 44% de uma versão anterior que soava estridente.
+
+Vale registrar o que se aprendeu afinando isso: **o que faz um motor soar agudo
+não é a afinação, é o centro de gravidade do espectro**. Baixar a fundamental
+quase não muda a percepção; quem manda são as frequências dos formantes, o
+corte do passa-baixa e o volume do sopro de ar, que é energia de banda larga.
+
+#### Duas vozes
+
+A máquina de síntese é uma só; os números que definem cada voz ficam em
+`ReceitaMotor`, separados dela. Hoje existem duas, e **`N` troca entre elas no
+meio da corrida** — é comparando com a mesma nave na mesma curva que se decide
+qual fica. A escolha é salva em `som.cfg`, ao lado do `controles.cfg`.
+
+| | PROPULSOR (padrão) | CAÇA |
+| --- | --- | --- |
+| caráter | no corpo: grave, fluido | na garganta: agudo, tenso |
+| fundamental | 34 → 146 Hz | 46 → 201 Hz |
+| formantes | 260/680/1450 Hz, largos | 335/880/1780 Hz, fortes e estreitos |
+| movimento | respiração de 0,27 Hz | uivo de 5,2 Hz + formantes passeando a 1,7 Hz |
+| rosnado | forte | metade |
+| inarmônico | nenhum | modulador em razão 2,41 |
+| centroide no talo | 647 Hz | 1026 Hz |
+| energia > 2 kHz no talo | 10% | 17% |
+
+O CAÇA é a voz de filme de nave. O que mais o define não é ser mais agudo: é o
+**formante que anda**. Formante parado é filtro; formante que passeia é
+garganta — e é isso que faz a máquina parecer estar modulando o próprio grito,
+que era o efeito obtido, na era analógica, processando o berro de um bicho. Por
+cima vem um modulador numa razão não inteira, que acrescenta parciais fora da
+série harmônica: o brilho metálico de algo que não queima combustível.
+
+Nenhuma das duas cita som registrado de franquia nenhuma — as duas aplicam a
+técnica, como a paleta faz no visual.
 
 As duas pistas têm vozes separadas — ÍON mais agudo à esquerda, ÍGNIS mais
 grave à direita. Num autorama com dois jogadores lado a lado, isso deixa cada
 um achar o próprio motor sem olhar a tela. O desvio de timbre dos filtros é
 metade do desvio de afinação: aplicar os dois cheios afastava demais as naves e
 deixava o ÍGNIS sem presença.
+
+#### Fim de partida
+
+Vitória e derrota são **stingers**, na forma que os jogos usam — não uma
+melodia, e sim quatro partes: um impacto grave no instante zero para marcar o
+momento, um acorde de dominante curto e tenso, a tônica entrando por cima larga
+e sustentada, e uma cauda com sala grande. É a resolução **V → I** que o ouvido
+lê como "conquistado"; notas soltas em sequência, que era a versão anterior,
+soam como MIDI barato por falta exatamente disso.
+
+A derrota desce em quintas e oitavas **sem a terça**. Isso não é economia: as
+duas tocam ao mesmo tempo, uma em cada lado da cabine, e uma terça menor
+brigaria com o dó maior do vencedor. Sem terça, a queda soa derrotada e ainda
+encaixa no acorde de quem ganhou.
 
 Três canais de mesa (`Motor`, `Sfx`, `Musica`) entram num master com limitador.
 A trilha tem três camadas que tocam sempre e só trocam de volume: o drone do
@@ -161,10 +210,11 @@ cd godot
 .\jogar.bat --som-wav=C:\temp\som
 ```
 
-São 49 arquivos, um por som, com as duas vozes de cada pista e uma varredura do
-motor de ponta a ponta (marcha lenta, martelar até o teto, superaquecer, voltar
-com o teto reduzido pelo tiro). O jogo nunca lê esses arquivos — quem toca é
-sempre a síntese em memória; eles servem só para ouvir.
+São 51 arquivos, um por som, com o timbre de cada pista e **quatro varreduras
+de motor** — as duas vozes × as duas pistas —, cada uma de ponta a ponta:
+marcha lenta, martelar até o teto, superaquecer e voltar com o teto reduzido
+pelo tiro. É o caminho mais rápido para comparar as vozes sem abrir o jogo. O
+jogo nunca lê esses arquivos — quem toca é sempre a síntese em memória.
 
 ---
 

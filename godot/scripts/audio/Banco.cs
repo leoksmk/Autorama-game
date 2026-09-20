@@ -322,44 +322,93 @@ public static class Banco
     }
 
     /// <summary>Vitória: três notas subindo, com corpo saturado e sala grande.</summary>
+    /// <summary>
+    /// Um acorde: várias notas na mesma voz, com o filtro fechando ao longo
+    /// do tempo. Tocar as notas JUNTAS, e não em sequência, é o que separa um
+    /// acorde de uma escadinha de notas soltas.
+    /// </summary>
+    private static Onda Acorde(double dur, double[] notas, double brilhoIni, double brilhoFim,
+                               double ataque, double queda, double curva = 1.6)
+    {
+        var m = new Onda(dur);
+        foreach (double f in notas)
+        {
+            // Curva baixa segura o corpo do acorde por mais tempo antes de
+            // cair; é o que dá sustentação a um acorde que precisa preencher
+            // a tela de resultado inteira.
+            var v = Onda.Serra(dur, f)
+                .Lp(p => Varre(brilhoIni, brilhoFim, p), q: 1.0)
+                .Ad(ataque, queda, curva);
+            m.Somar(v, 1.0 / notas.Length);
+        }
+        return m;
+    }
+
+    /// <summary>
+    /// Vitória. Montada como um "stinger" de jogo, que é uma forma com quatro
+    /// partes e não uma melodia:
+    ///
+    ///   1. IMPACTO. Um golpe grave no instante zero, marcando o momento. Sem
+    ///      ele o som começa sem autoridade, e era esse o problema da versão
+    ///      anterior — três serras em sequência, que soavam como MIDI barato.
+    ///   2. DOMINANTE. Um acorde de sol, curto e tenso: a pergunta.
+    ///   3. TÔNICA. O acorde de dó entrando em cima, largo e sustentado, com
+    ///      graves e agudos juntos: a resposta. Essa resolução (V → I) é o que
+    ///      o ouvido lê como "conquistado", e nenhuma nota solta consegue.
+    ///   4. CAUDA. Brilho que decai e sala grande, para o som não terminar
+    ///      seco no meio da comemoração.
+    /// </summary>
     public static Onda Vitoria()
     {
-        const double dur = 2.0;
+        const double dur = 2.9;
         var m = new Onda(dur);
-        double[] notas = { 392, 523, 784 };
-        for (int i = 0; i < notas.Length; i++)
-        {
-            double sobra = dur - i * 0.16;
-            var n = Onda.Serra(sobra, notas[i])
-                .Lp(p => Varre(3800, 1200, p), q: 1.3)
-                .Ad(0.006, sobra * 0.8, 1.6);
-            var oitava = Onda.Serra(sobra, notas[i] * 2)
-                .Ad(0.006, sobra * 0.5, 2.0);
-            m.Somar(n, 0.8, i * 0.16);
-            m.Somar(oitava, 0.25, i * 0.16);
-        }
-        var sub = Onda.Seno(dur, t => Varre(98, 49, t / 0.8)).Ad(0.01, 1.2, 1.6);
-        return m.Somar(sub, 0.7)
-            .Saturar(2.0)
-            .Espaco(0.85, 0.3)
-            .Normalizar(0.85);
+
+        var golpe = Onda.Seno(dur, t => Varre(98, 40, t / 0.42)).Ad(0.003, 0.75, 1.9);
+        var pancada = Onda.Ruido(dur, 91)
+            .Lp(p => Varre(2400, 260, p), q: 1.0)
+            .Ad(0.002, 0.24, 2.6);
+        m.Somar(golpe, 0.95).Somar(pancada, 0.42);
+
+        // V: sol, com a sétima, pedindo resolução.
+        m.Somar(Acorde(0.60, new[] { 196.0, 294.0, 392.0, 494.0 }, 2600, 1200, 0.008, 0.5), 0.60);
+        // I: dó em três oitavas, sustentado até o fim.
+        m.Somar(Acorde(dur - 0.38, new[] { 131.0, 196.0, 262.0, 392.0, 523.0, 659.0 },
+                       3200, 850, 0.014, 2.5, curva: 1.15), 0.92, 0.38);
+
+        var brilho = Onda.Ruido(dur, 93)
+            .Bp(p => Varre(2800, 6200, Math.Min(1.0, p * 2.0)), q: 2.0)
+            .Env(p => Sino(Math.Min(1.0, p * 1.9)) * 0.55);
+        m.Somar(brilho, 0.20, 0.38);
+
+        return m.Saturar(1.9).Espaco(0.95, 0.34).Normalizar(0.92);
     }
 
     /// <summary>Derrota: o mesmo gesto ao contrário, com o filtro fechando.</summary>
     public static Onda Derrota()
     {
-        const double dur = 1.8;
+        const double dur = 2.6;
         var m = new Onda(dur);
-        double[] notas = { 330, 262, 196 };
-        for (int i = 0; i < notas.Length; i++)
-        {
-            double sobra = dur - i * 0.2;
-            var n = Onda.Serra(sobra, notas[i])
-                .Lp(p => Varre(1800, 400, p), q: 1.1)
-                .Ad(0.008, sobra * 0.75, 1.7);
-            m.Somar(n, 0.75, i * 0.2);
-        }
-        return m.Saturar(1.6).Espaco(0.8, 0.28).Normalizar(0.6);
+
+        // Baque abafado: o peso sem a comemoração.
+        var baque = Onda.Seno(dur, t => Varre(72, 32, t / 0.6)).Ad(0.012, 0.95, 1.7);
+        m.Somar(baque, 0.85);
+
+        // Quintas e oitavas descendo, SEM a terça. Isso não é economia: as
+        // duas faixas tocam ao mesmo tempo, uma em cada lado da cabine, e uma
+        // terça menor aqui brigaria com o dó maior da vitória. Sem terça, a
+        // queda soa derrotada e ainda assim encaixa no acorde do vencedor.
+        m.Somar(Acorde(1.3, new[] { 392.0, 523.0 }, 1600, 480, 0.02, 1.05), 0.55);
+        m.Somar(Acorde(1.5, new[] { 294.0, 392.0 }, 1200, 380, 0.03, 1.25), 0.55, 0.42);
+        m.Somar(Acorde(dur - 0.88, new[] { 131.0, 196.0, 262.0 }, 850, 240, 0.04, 1.7, curva: 1.2),
+                0.72, 0.88);
+
+        // Ar escapando: a nave desligando.
+        var vapor = Onda.Ruido(dur, 97)
+            .Lp(p => Varre(1500, 280, p), q: 0.8)
+            .Env(p => Math.Pow(1.0 - p, 2.0) * 0.6);
+        m.Somar(vapor, 0.3);
+
+        return m.Saturar(1.4).Espaco(0.9, 0.3).Normalizar(0.62);
     }
 
     // -- motor em sofrimento -------------------------------------------------
