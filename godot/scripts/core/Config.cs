@@ -17,7 +17,27 @@ public static class Cfg
     public const string NomeP1 = "ÍON";
     public const string NomeP2 = "ÍGNIS";
 
-    public const int VoltasParaVencer = 5;
+    // ------------------------------------------------------------------
+    // O que o CIRCUITO escolhe
+    // ------------------------------------------------------------------
+    // Estes três não são constantes: quem os define é a pista em uso
+    // (Mundo.Tracado.Usar). Ficam aqui, e não no circuito, porque a REGRA
+    // precisa deles e a regra não conhece geometria — é o mesmo motivo de
+    // Checkpoints estar em frações de volta e não em metros.
+    //
+    // Os valores escritos abaixo são os do ANEL DE ÍCARO, que é o padrão, e é
+    // o que os testes do núcleo enxergam quando rodam sem circuito nenhum.
+
+    public static int VoltasParaVencer = 5;
+
+    /// <summary>
+    /// Multiplica o teto de velocidade. Existe porque Speed é medida em VOLTAS
+    /// por segundo: sem ele, uma pista de 709 m levaria os mesmos 6,25 s de
+    /// volta que uma de 387 m e passaria a 408 km/h. Em 1,0 a conta é a de
+    /// sempre, bit a bit — é o que mantém a paridade com a versão Python.
+    /// </summary>
+    public static double RitmoDoCircuito = 1.0;
+
     public const double ContagemDuracao = 3.0;
 
     // ------------------------------------------------------------------
@@ -65,21 +85,22 @@ public static class Cfg
     // ------------------------------------------------------------------
     // ATENÇÃO: remedir contra a posição física dos sensores.
     //
-    // Os quatro caem em marcos do traçado, não em frações redondas: entrada do
-    // S, saída do curvão, fim da reta oposta e ápice da subida. Como o t é
-    // reparametrizado por comprimento (Mundo.Tracado), cada valor aqui é uma
-    // distância fixa em metros desde a largada — que é o que o sensor mede.
+    // Quem define é o circuito. Os de cada um caem em marcos do traçado, não em
+    // frações redondas. Como o t é reparametrizado por comprimento
+    // (Mundo.Tracado), cada valor é uma distância fixa em metros desde a
+    // largada — que é o que o sensor mede.
     //
-    // Nenhum deles cai em trecho inclinado, e isso é requisito, não sorte: o
-    // pórtico do checkpoint é construído no quadro local do leito, então um
-    // checkpoint no meio de uma curva de 40° daria um portal tombado 40°. O
-    // CP2 nasceu em 0,38, no curvão, e foi para 0,35 — a saída do S — por isso.
+    // O que manda no espaçamento é o TEMPO entre um sensor e o seguinte, porque
+    // é ele que decide de quanto em quanto a caixa de item abre e quanto vale
+    // um Escudo. Cerca de 1,5 s é o alvo; por isso o INTERLAGOS ORBITAL, cuja
+    // volta leva 11,3 s, tem seis checkpoints e não quatro.
     //
+    // Abaixo, os do ANEL DE ÍCARO:
     //   CP1 -> CP2   81 m   1,31 s no talo
     //   CP2 -> CP3   97 m   1,56 s
     //   CP3 -> CP4   89 m   1,44 s
     //   CP4 -> CP1  120 m   1,94 s
-    public static readonly double[] Checkpoints = { 0.14, 0.35, 0.60, 0.83 };
+    public static double[] Checkpoints = { 0.14, 0.35, 0.60, 0.83 };
 
     // A janela é de TEMPO, não de posição: cruzar o checkpoint abre a caixa e
     // ela fica aberta por RoletaOportunidade. Casa com o sensor físico, que

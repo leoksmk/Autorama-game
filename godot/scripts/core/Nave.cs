@@ -275,8 +275,10 @@ public sealed class Nave
         // 4. PWM. O único ponto do jogo que decide o que vai ao motor.
         Pwm = TetoPwm() * esforco;
 
-        // 5. velocidade persegue o teto correspondente ao PWM
-        double alvo = Pwm * Cfg.VelPorPwm;
+        // 5. velocidade persegue o teto correspondente ao PWM. O ritmo do
+        //    circuito entra aqui e em nenhum outro lugar: é o único ponto em
+        //    que "quanto anda este PWM" pode depender da pista.
+        double alvo = Pwm * Cfg.VelPorPwm * Cfg.RitmoDoCircuito;
         if (Speed < alvo)
             Speed = Math.Min(alvo, Speed + Cfg.Accel * dt);
         else if (Speed > alvo)

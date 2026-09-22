@@ -67,18 +67,36 @@ public partial class CameraRig : Node3D
         float fov;
         float rapidez = 2.2f;
 
+        // Enquadramento na medida do circuito, e derivado dele — não um
+        // conjunto de números por pista, que sempre acaba desatualizado.
+        //
+        // `alturaGeral` é a altura de câmera que faz o circuito caber na
+        // vertical do quadro: metade do lado que manda (a largura conta
+        // dividida pela proporção da tela, porque na horizontal sobra campo),
+        // dividida pela tangente de meio FOV, com 25% de folga.
+        var caixa = Tracado.Caixa;
+        Vector3 meio = caixa.Position + caixa.Size * 0.5f;
+        float proporcao = MathF.Max(1f, GetViewport().GetVisibleRect().Size.Aspect());
+        float meioLado = MathF.Max(caixa.Size.X * 0.5f / proporcao, caixa.Size.Z * 0.5f);
+        float alturaGeral = meioLado / MathF.Tan(Mathf.DegToRad(22f)) * 1.25f;
+        float escala = MathF.Max(caixa.Size.X, caixa.Size.Z) / 133f;
+
         if (Cinematica)
         {
             float a = t * 0.06f + 0.6f;
-            posAlvo = new Vector3(2f + MathF.Cos(a) * 116f, 26f + 8f * MathF.Sin(t * 0.13f), -2f + MathF.Sin(a) * 98f);
-            olharAlvo = new Vector3(2f, 2f, -2f);
+            posAlvo = meio + new Vector3(MathF.Cos(a) * 116f * escala,
+                                         (26f + 8f * MathF.Sin(t * 0.13f)) * escala,
+                                         MathF.Sin(a) * 98f * escala);
+            olharAlvo = meio;
             fov = 46f;
         }
         else if (ModoAtual == Modo.VisaoGeral)
         {
-            // Enquadra os 130 x 94 m do circuito inteiro com folga nas bordas.
-            posAlvo = new Vector3(4f, 124f, 56f);
-            olharAlvo = new Vector3(4f, 0f, -4f);
+            // Quase de cima. A inclinação é pequena de propósito: cada grau
+            // que a câmera deita rouba alcance do lado de perto do quadro, e é
+            // justamente ali que fica a reta de largada.
+            posAlvo = meio + new Vector3(0f, alturaGeral, alturaGeral * 0.28f);
+            olharAlvo = meio;
             fov = 44f;
         }
         else if (ModoAtual == Modo.Perseguicao)
@@ -99,11 +117,14 @@ public partial class CameraRig : Node3D
             var foco = lid.Lerp(outra, 0.4f);
             float sep = lid.DistanceTo(outra);
             // O centro do oval é o centro da estação: "radial" aponta para fora da pista.
-            var radial = new Vector3(lid.X, 0f, lid.Z);
-            radial = radial.LengthSquared() > 1f ? radial.Normalized() : Vector3.Back;
+            // Para fora do circuito, medido a partir do MEIO DA CAIXA e não da
+            // origem do mundo: o miolo do INTERLAGOS ORBITAL passa perto da
+            // origem, e ali a direção radial virava do avesso a cada volta.
+            var radial = new Vector3(lid.X - meio.X, 0f, lid.Z - meio.Z);
+            radial = radial.LengthSquared() > 25f ? radial.Normalized() : Vector3.Back;
             var frente = -naves[lider].GlobalTransform.Basis.Z;
             frente = new Vector3(frente.X, 0f, frente.Z).Normalized();
-            float d = Mathf.Clamp(26f + sep * 0.5f, 26f, 104f);
+            float d = Mathf.Clamp(26f + sep * 0.5f, 26f, 104f * escala);
             posAlvo = foco + radial * d + Vector3.Up * (8f + d * 0.4f) - frente * (d * 0.3f);
             olharAlvo = foco + frente * 4f;
             fov = 44f;

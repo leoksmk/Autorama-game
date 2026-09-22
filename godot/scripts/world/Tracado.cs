@@ -1,23 +1,15 @@
 // Geometria 3D do traçado: converte o t da regra (Core.Pista) em posição e
-// orientação no espaço.
+// orientação no espaço, para o circuito que estiver em uso.
 //
-// A forma não é mais uma elipse modulada. O leito é uma B-SPLINE CÚBICA
-// FECHADA passando pelo polígono de controle abaixo, que desenha um circuito
-// de verdade: reta principal, o S (esquerda rápida, direita fechada, em
-// descida), o curvão do leste, a reta oposta no fundo do vale e a subida do
-// zênite voltando para a largada.
-//
-// Por que B-spline e não Catmull-Rom: a inclinação lateral das curvas é
-// calculada a partir da CURVATURA do traçado. Catmull-Rom é contínua só na
-// primeira derivada, então a curvatura salta em cada ponto de controle e a
-// pista ficaria com dobras de inclinação visíveis. A B-spline cúbica uniforme
-// é C², a curvatura varia sem degrau, e a inclinação sai lisa de graça. O
-// preço é que a curva não passa pelos pontos de controle — ela é puxada para
-// dentro do polígono —, o que não importa: a forma é autoral, não interpolada.
+// O leito é uma B-SPLINE CÚBICA FECHADA sobre o polígono de controle do
+// circuito (ver Circuitos.cs). B-spline e não Catmull-Rom porque a inclinação
+// lateral vem da CURVATURA: Catmull-Rom é contínua só na primeira derivada,
+// então a curvatura salta em cada ponto de controle e a pista ganharia dobras
+// de inclinação visíveis. A cúbica uniforme é C² e a inclinação sai lisa.
 //
 // O t é REPARAMETRIZADO POR COMPRIMENTO DE ARCO: t = 0,25 é sempre um quarto
 // da volta em METROS, não um quarto do parâmetro da spline. Sem isso a nave
-// acelararia e frearia sozinha onde os pontos de controle são mais densos, e
+// aceleraria e frearia sozinha onde os pontos de controle são mais densos, e
 // pior: os checkpoints em t deixariam de corresponder a distâncias fixas na
 // pista, que é exatamente o que os sensores físicos vão medir.
 //
@@ -31,49 +23,29 @@ namespace OrbitalDerby.Mundo;
 
 public static class Tracado
 {
-    public const float OffsetFaixa = 2.6f;     // do centro até cada faixa, m
-    public const float Largura = 11f;          // largura total do leito, m
     public const float AlturaVoo = 0.62f;      // a nave flutua acima do leito
 
-    // Inclinação lateral máxima nas curvas. Alta de propósito: a 220 km/h numa
-    // curva de 16 m de raio, leito plano não se sustenta nem como ficção.
-    public const float InclinacaoMax = 0.85f;  // rad (~49°)
-    // Raio (m) em que a curva já vale meia inclinação. Em metros, e não no
-    // parâmetro da curva, para a inclinação não mudar quando o traçado crescer.
-    private const float RaioDeReferencia = 18f;
+    private static Circuito _circuito = Circuitos.Icaro;
 
     /// <summary>
-    /// Polígono de controle da volta, em ordem de percurso: (x, altura, z).
-    ///
-    /// t = 0 — a linha de largada — cai no meio da reta principal, de propósito:
-    /// a bandeira quadriculada numa curva fica ilegível de qualquer câmera.
+    /// Troca o circuito e joga fora as tabelas medidas. Quem chama precisa
+    /// reconstruir tudo que foi gerado a partir da geometria — pista, pedras,
+    /// estação —, por isso a troca mora em Main.AplicarCircuito e não aqui.
     /// </summary>
-    private static readonly Vector3[] Controle =
+    public static void Usar(Circuito circuito)
     {
-        // -- reta principal (borda sul), rumo leste, subindo até a entrada do S
-        new(-18f, 5.6f, 45f), new(4f, 6.3f, 45f), new(26f, 6.4f, 45f),
+        _circuito = circuito;
+        _parametro = null;
+        Cfg.Checkpoints = circuito.Checkpoints;
+        Cfg.RitmoDoCircuito = circuito.Ritmo;
+        Cfg.VoltasParaVencer = circuito.Voltas;
+    }
 
-        // -- O S: esquerda longa e rápida, direita curta e mais fechada, saída
-        //    abrindo de novo à esquerda. Os três em descida, um atrás do outro.
-        new(47f, 5.4f, 44f),
-        new(62f, 3.4f, 39f),     // entra virando à esquerda
-        new(69f, 1.0f, 27f),     // ápice da esquerda
-        new(67f, -1.2f, 15f),
-        new(58f, -3.0f, 7f),     // inverte: agora é direita, e o leito cai
-        new(57f, -4.6f, -5f),    // ápice da direita, mais fechado que o da esquerda
-        new(64f, -5.9f, -16f),   // saída, abrindo à esquerda de novo
+    public static Circuito Atual => _circuito;
 
-        // -- curvão do leste, já no ponto mais baixo da volta
-        new(66f, -6.8f, -28f), new(58f, -7.2f, -39f), new(43f, -7.4f, -47f),
-
-        // -- reta oposta (borda norte), rumo oeste, no fundo do vale
-        new(23f, -7.4f, -49f), new(0f, -7.4f, -49f), new(-22f, -7.0f, -48f),
-
-        // -- subida do zênite: uma esquerda só, que fecha no ápice e abre na saída
-        new(-42f, -6.0f, -42f), new(-58f, -4.4f, -27f), new(-62f, -2.4f, -10f),
-        new(-61f, -0.2f, 5f), new(-58f, 2.0f, 20f), new(-49f, 3.6f, 34f),
-        new(-40f, 4.6f, 45f),
-    };
+    public static float Largura => _circuito.Largura;
+    public static float OffsetFaixa => _circuito.OffsetFaixa;
+    public static float InclinacaoMax => _circuito.InclinacaoMax;
 
     /// <summary>Pista 0 por dentro, pista 1 por fora — igual à versão 2D.</summary>
     public static float OffsetDaFaixa(int lane) => lane == 0 ? -OffsetFaixa : OffsetFaixa;
@@ -86,16 +58,7 @@ public static class Tracado
     /// </summary>
     private static Vector3 Forma(double p)
     {
-        int n = Controle.Length;
-        double x = p - Math.Floor(p / n) * n;
-        int i = (int)x;
-        float u = (float)(x - i);
-
-        Vector3 a = Controle[(i - 1 + n) % n];
-        Vector3 b = Controle[i];
-        Vector3 c = Controle[(i + 1) % n];
-        Vector3 d = Controle[(i + 2) % n];
-
+        var (a, b, c, d, u) = Vizinhos(p);
         float u2 = u * u, u3 = u2 * u;
         return (a * (-u3 + 3f * u2 - 3f * u + 1f)
               + b * (3f * u3 - 6f * u2 + 4f)
@@ -103,34 +66,62 @@ public static class Tracado
               + d * u3) / 6f;
     }
 
+    /// <summary>Primeira e segunda derivadas da spline no parâmetro bruto.</summary>
+    private static (Vector3 d1, Vector3 d2) Derivadas(double p)
+    {
+        var (a, b, c, d, u) = Vizinhos(p);
+        float u2 = u * u;
+        var d1 = (a * (-3f * u2 + 6f * u - 3f)
+                + b * (9f * u2 - 12f * u)
+                + c * (-9f * u2 + 6f * u + 3f)
+                + d * (3f * u2)) / 6f;
+        var d2 = (a * (-6f * u + 6f)
+                + b * (18f * u - 12f)
+                + c * (-18f * u + 6f)
+                + d * (6f * u)) / 6f;
+        return (d1, d2);
+    }
+
+    private static (Vector3 a, Vector3 b, Vector3 c, Vector3 d, float u) Vizinhos(double p)
+    {
+        var pts = _circuito.Controle;
+        int n = pts.Length;
+        double x = p - Math.Floor(p / n) * n;
+        int i = (int)x;
+        return (pts[(i - 1 + n) % n], pts[i], pts[(i + 1) % n], pts[(i + 2) % n], (float)(x - i));
+    }
+
     /// <summary>Ponto da linha de centro a t da volta, medido em COMPRIMENTO.</summary>
     public static Vector3 Centro(double t) => Forma(ParametroEm(Pista.Mod1(t)));
 
-    private static Vector3 Tangente(double t)
-    {
-        const double h = 2e-4;   // ~0,08 m: curto para acompanhar a curva, longo para não virar ruído
-        return (Centro(t + h) - Centro(t - h)).Normalized();
-    }
+    /// <summary>
+    /// Tangente unitária em t. Analítica, e não por diferença finita: a tabela
+    /// de reparametrização é linear por pedaço, então derivar numericamente por
+    /// cima dela injeta ruído na curvatura — e é a curvatura que acende as
+    /// zebras e decide a inclinação.
+    /// </summary>
+    private static Vector3 Tangente(double t) => Derivadas(ParametroEm(Pista.Mod1(t))).d1.Normalized();
 
     /// <summary>
     /// Curvatura horizontal com sinal, em 1/m. Positiva quando a pista vira à
-    /// esquerda. Em metros, e não no parâmetro, para não depender do tamanho
-    /// do circuito.
+    /// esquerda. Em metros, e não no parâmetro, para não depender do tamanho do
+    /// circuito: a mesma curva fechada inclina igual em qualquer pista.
     /// </summary>
     private static float Curvatura(double t)
     {
-        const double h = 1.5e-3;
-        return Tangente(t - h).Cross(Tangente(t + h)).Y / (float)(2 * h * Comprimento);
+        var (d1, d2) = Derivadas(ParametroEm(Pista.Mod1(t)));
+        float den = MathF.Pow(d1.X * d1.X + d1.Z * d1.Z, 1.5f);
+        return den > 1e-9f ? (d1.Z * d2.X - d1.X * d2.Z) / den : 0f;
     }
 
     /// <summary>Inclinação lateral do leito em t, em radianos. Zero na reta.</summary>
     public static float Inclinacao(double t) =>
-        InclinacaoMax * MathF.Tanh(MathF.Abs(Curvatura(t)) * RaioDeReferencia);
+        InclinacaoMax * MathF.Tanh(MathF.Abs(Curvatura(t)) * _circuito.RaioDeReferencia);
 
     /// <summary>
     /// Quadro local num ponto da volta: X à direita, Y para cima (já inclinado
     /// na curva), -Z para a frente. <paramref name="offset"/> positivo afasta do
-    /// centro da órbita; <paramref name="altura"/> sobe pela normal do leito.
+    /// centro do circuito; <paramref name="altura"/> sobe pela normal do leito.
     /// </summary>
     public static Transform3D Quadro(double t, float offset = 0f, float altura = 0f)
     {
@@ -141,29 +132,33 @@ public static class Tracado
         Vector3 esquerda = cimaReto.Cross(frente).Normalized();
 
         float curva = Curvatura(t);
-        float banco = InclinacaoMax * MathF.Tanh(MathF.Abs(curva) * RaioDeReferencia);
+        float banco = InclinacaoMax * MathF.Tanh(MathF.Abs(curva) * _circuito.RaioDeReferencia);
         // A normal do leito tomba para DENTRO da curva: é o que segura a nave.
         Vector3 cima = (cimaReto + esquerda * MathF.Sign(curva) * MathF.Tan(banco)).Normalized();
         Vector3 direita = frente.Cross(cima).Normalized();
 
-        Vector3 pos = p + Fora(direita, p) * offset + cima * altura;
+        Vector3 pos = p + direita * (LadoDeFora * offset) + cima * altura;
         return new Transform3D(new Basis(direita, cima, -frente), pos);
     }
 
-    /// <summary>Direção lateral que aponta para fora do circuito, no plano inclinado.</summary>
-    public static Vector3 Fora(Transform3D quadro) => Fora(quadro.Basis.X, quadro.Origin);
-
-    private static Vector3 Fora(Vector3 direita, Vector3 p)
-    {
-        Vector3 radial = new(p.X, 0f, p.Z);
-        return direita.Dot(radial) >= 0f ? direita : -direita;
-    }
+    /// <summary>
+    /// Direção lateral que aponta para fora do circuito, no plano inclinado.
+    ///
+    /// É um LADO FIXO do sentido de percurso, decidido uma vez por circuito, e
+    /// não "o lado oposto ao centro do mundo". A diferença aparece no
+    /// INTERLAGOS ORBITAL, cujo miolo passa pelo meio do circuito: ali a regra
+    /// radial inverteria no meio da volta, as duas faixas trocariam de lugar e
+    /// o leito ganharia uma emenda de cor no ponto da inversão.
+    /// </summary>
+    public static Vector3 Fora(Transform3D quadro) => quadro.Basis.X * LadoDeFora;
 
     // -- comprimento de arco e reparametrização ---------------------------------
 
     private const int Amostras = 4096;
     private static float[]? _parametro;    // parâmetro bruto na fração de volta j/Amostras
     private static float _comprimento;
+    private static float _ladoDeFora = 1f;
+    private static Aabb _caixa;
 
     public static float Comprimento
     {
@@ -171,6 +166,29 @@ public static class Tracado
         {
             Preparar();
             return _comprimento;
+        }
+    }
+
+    /// <summary>
+    /// Caixa que contém a volta inteira. É o que a câmera usa para enquadrar:
+    /// os circuitos têm tamanhos diferentes, e um enquadramento fixo ou corta o
+    /// INTERLAGOS ORBITAL ou deixa a ÓRBITA CLÁSSICA perdida no meio da tela.
+    /// </summary>
+    public static Aabb Caixa
+    {
+        get
+        {
+            Preparar();
+            return _caixa;
+        }
+    }
+
+    private static float LadoDeFora
+    {
+        get
+        {
+            Preparar();
+            return _ladoDeFora;
         }
     }
 
@@ -188,16 +206,18 @@ public static class Tracado
 
     /// <summary>
     /// Mede a volta uma vez e monta as duas tabelas: bruto → metros e, invertida,
-    /// metros → bruto. Preguiçosa porque <see cref="Curvatura"/> precisa do
-    /// comprimento e o comprimento precisa da forma — e a forma não depende de
-    /// nenhum dos dois, então a recursão para aqui.
+    /// metros → bruto. Depois decide de que lado fica o "fora" do circuito.
+    ///
+    /// Tudo aqui usa só <see cref="Forma"/> e <see cref="Derivadas"/>, que não
+    /// dependem das tabelas — é o que impede a recursão, já que Curvatura e
+    /// Quadro dependem delas.
     /// </summary>
     private static void Preparar()
     {
         if (_parametro is not null)
             return;
 
-        int n = Controle.Length;
+        int n = _circuito.Controle.Length;
         var acum = new float[Amostras + 1];
         Vector3 anterior = Forma(0.0);
         for (int i = 1; i <= Amostras; i++)
@@ -221,7 +241,47 @@ public static class Tracado
             par[j] = (float)((k + f) * n / (double)Amostras);
         }
         par[Amostras] = n;
-
         _parametro = par;
+
+        _ladoDeFora = MedirLadoDeFora();
+
+        Vector3 min = Forma(0.0), max = min;
+        for (int i = 1; i < Amostras; i++)
+        {
+            Vector3 v = Forma((double)i * n / Amostras);
+            min = min.Min(v);
+            max = max.Max(v);
+        }
+        _caixa = new Aabb(min, max - min);
+    }
+
+    /// <summary>
+    /// De que lado do sentido de percurso fica o lado de fora, +1 ou -1.
+    ///
+    /// Vota ponto a ponto — "a direita do carro aponta para longe do centroide
+    /// do circuito?" — e o voto pesa pela distância ao centroide, para que as
+    /// retas externas decidam e o miolo, que fica perto do centroide e onde o
+    /// sinal é ambíguo, quase não conte.
+    /// </summary>
+    private static float MedirLadoDeFora()
+    {
+        const int amostras = 720;
+        Vector3 centroide = Vector3.Zero;
+        for (int i = 0; i < amostras; i++)
+            centroide += Forma((double)i * _circuito.Controle.Length / amostras);
+        centroide /= amostras;
+
+        float voto = 0f;
+        for (int i = 0; i < amostras; i++)
+        {
+            double p = (double)i * _circuito.Controle.Length / amostras;
+            Vector3 pos = Forma(p);
+            Vector3 frente = Derivadas(p).d1.Normalized();
+            Vector3 cima = (Vector3.Up - frente * frente.Dot(Vector3.Up)).Normalized();
+            Vector3 direita = frente.Cross(cima).Normalized();
+            Vector3 radial = new(pos.X - centroide.X, 0f, pos.Z - centroide.Z);
+            voto += direita.Dot(radial);   // o próprio produto já pesa pela distância
+        }
+        return voto >= 0f ? 1f : -1f;
     }
 }

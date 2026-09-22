@@ -15,11 +15,15 @@ namespace OrbitalDerby.Mundo;
 
 public partial class Estacao : Node3D
 {
-    // O circuito novo tem 130 m de ponta a ponta e a ÍRIS-9 fica no meio dele:
-    // no raio antigo ela sumia no vazio do infield. Os detalhes (balizas, aro da
-    // íris) continuam em tamanho absoluto, então a estação maior também ganha
-    // densidade de detalhe em vez de virar a mesma bola esticada.
-    public const float Raio = 16f;
+    // O tamanho e o lugar vêm do circuito: o ANEL DE ÍCARO a põe no miolo com
+    // 16 m, o INTERLAGOS ORBITAL a joga para 74 m de altura com 24 m, porque o
+    // miolo dele é pista. Os detalhes (balizas, aro da íris) continuam em
+    // tamanho absoluto, então a estação maior ganha densidade de detalhe em vez
+    // de virar a mesma bola esticada.
+    private float Raio => Tracado.Atual.EstacaoRaio;
+
+    /// <summary>Raio do circuito em uso. Só quem posiciona cenário precisa.</summary>
+    public static float RaioAtual => Tracado.Atual.EstacaoRaio;
     private const float AnguloAbertura = 21f;   // graus, medidos a partir do polo da íris
     private const int Laminas = 9;
 
@@ -35,7 +39,7 @@ public partial class Estacao : Node3D
 
     public override void _Ready()
     {
-        Position = new Vector3(2f, 7f, -2f);   // no centro geométrico do traçado, não na origem
+        Position = Tracado.Atual.EstacaoPos;
         RotationDegrees = new Vector3(24f, 0f, 0f);   // íris inclinada para o lado da câmera
         _corpo = new Node3D();
         AddChild(_corpo);
@@ -254,7 +258,7 @@ public partial class Estacao : Node3D
         {
             LightColor = new Color(0.66f, 0.5f, 1f),
             LightEnergy = 5f,
-            OmniRange = 95f,
+            OmniRange = Raio * 6f,
             ShadowEnabled = true,
             LightVolumetricFogEnergy = 4f,
             Position = new Vector3(0f, yNucleo + rb * 0.9f, 0f),

@@ -10,9 +10,9 @@ existe em duas versões:
   ela (`tests/`). No desktop também aceita os controles ESP32
   (`python main.py`); no navegador não há porta COM, então lá é sempre teclado.
 
-> **As duas não são mais idênticas.** A 3D ganhou traçado próprio (circuito
-> ANEL DE ÍCARO, 388 m, 4 checkpoints) e Escudo com prazo em checkpoints; a 2D
-> segue com a órbita elíptica, 3 checkpoints e Escudo sem prazo. O que continua
+> **As duas não são mais idênticas.** A 3D ganhou quatro circuitos com
+> checkpoints e ritmo próprios, e Escudo com prazo em checkpoints; a 2D segue
+> com a órbita elíptica, 3 checkpoints e Escudo sem prazo. O que continua
 > igual — e é o que os testes de paridade travam — é a física do acelerador:
 > cadência, calor, PWM e velocidade. Ver "Onde as duas versões divergem".
 
@@ -63,6 +63,8 @@ chamando o executável do Godot, elas vão depois de `--`:
 | --- | --- |
 | `--p1=` / `--p2=` | entrada da nave: `teclado`, `controle` (ou `esp`, `serial`), `cpu` |
 | `--demo` | CPU contra CPU, em loop |
+| `--pista=` | circuito: `icaro`, `interlagos`, `bruto`, `classica` |
+| `--medir-pistas` | imprime a tabela medida de todos os circuitos e sai |
 | `--qualidade=` | `alta` (padrão), `media`, `baixa` |
 | `--captura=<pasta>` | roteiro fixo que salva 12 capturas de tela e fecha |
 | `--captura=rajada:<pasta>` | 60 fotos seguidas na câmera de perseguição |
@@ -77,13 +79,31 @@ chamando o executável do Godot, elas vão depois de `--`:
 | ÍON (pista 1) | `A` | `S` |
 | ÍGNIS (pista 2) | `L` | `K` |
 
-`Espaço` começa · `R` reinicia · `C` troca a câmera · `Q` troca a qualidade ·
-`M` muta o som · `N` troca a voz dos motores · `F11` tela cheia · `F3` FPS ·
-`Esc` sai
+`Espaço` começa · `R` reinicia · `Tab` abre as configurações · `C` troca a
+câmera · `Q` troca a qualidade · `M` muta o som · `N` troca a voz dos motores ·
+`F11` tela cheia · `F3` FPS · `Esc` sai
 
-Na tela de abertura, **`1` e `2` trocam a entrada de cada nave** entre teclado,
-controle ESP e CPU. A escolha fica salva em
-`%APPDATA%\Godot\app_userdata\Orbital Derby\controles.cfg`.
+### Configurações
+
+A **engrenagem no alto da tela inicial** abre o painel — ou `Tab`. Ali ficam
+pista, controle de cada nave, som, voz dos motores, qualidade e câmera. Setas
+escolhem e mudam, o mouse também clica (metade direita da linha avança, a
+esquerda volta), `Esc` ou `Enter` fecha.
+
+Com o painel aberto, **os dois botões do controle ESP navegam tudo**: acelerador
+desce de linha, ação muda o valor, e a última linha fecha. É o único jeito de
+configurar numa feira, onde ninguém tem teclado nem mouse à mão.
+
+Tudo fica salvo em
+`%APPDATA%\Godot\app_userdata\Orbital Derby\orbital.cfg`, num arquivo só —
+antes eram dois, escritos de lugares diferentes, e salvar uma opção arriscava
+apagar outra. Os dois antigos ainda são lidos uma vez, se o novo não existir.
+
+**Quando a corrida acaba, o jogo volta ao menu** e não emenda outra sozinho: é
+ali que o próximo jogador escolhe pista e controle.
+
+Na tela de abertura, **`1` e `2`** continuam trocando a entrada de cada nave
+entre teclado, controle ESP e CPU.
 
 Câmeras: **transmissão** (fora da pista, junto de quem lidera, com a estação ao
 fundo; abre o quadro quando as naves se afastam), **visão geral** (quase de
@@ -97,27 +117,54 @@ cima) e **perseguição** (atrás do líder).
 | média | sem névoa volumétrica, 2 cascatas (4096), MSAA 2x, pedras sem sombra |
 | baixa | também sem SSR e SSAO, sem MSAA, luz da estação sem sombra |
 
-### O circuito
+### Os circuitos
 
-A 3D não corre mais numa elipse. O leito é o **ANEL DE ÍCARO**: 388 m de volta,
-gerados por uma B-spline cúbica fechada sobre 23 pontos de controle em
-`scripts/world/Tracado.cs`. Cinco trechos, na ordem de percurso:
+A 3D tem quatro pistas. A escolha é feita no menu (engrenagem no alto) ou por
+`--pista=`, e vale a partir da corrida seguinte.
 
-| Trecho | t | O que é |
-| --- | --- | --- |
-| Reta principal | 0,00 – 0,13 | Largada no meio dela, subindo de leve |
-| **O S** | 0,16 – 0,34 | Esquerda rápida, direita mais fechada, em descida de 9 m |
-| Curvão do leste | 0,35 – 0,50 | Esquerda longa, raio mínimo 16 m, o ponto mais baixo |
-| Reta oposta | 0,52 – 0,62 | No fundo do vale |
-| Subida do zênite | 0,63 – 0,98 | Uma esquerda só, fechando no ápice |
+| Circuito | Volta | Em tela | Voltas | Raio mín. | Banco | Rampa | Desnível |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| **ANEL DE ÍCARO** | 387 m | 223 km/h | 5 | 16,6 m | 22° | 7,6% | 5,3 m |
+| **INTERLAGOS ORBITAL** | 709 m | 225 km/h | 3 | 10,3 m | 25° | 9,6% | 5,0 m |
+| **ÍCARO BRUTO** | 387 m | 223 km/h | 5 | 14,3 m | 42° | 18,6% | 13,7 m |
+| **ÓRBITA CLÁSSICA** | 317 m | 182 km/h | 5 | 17,0 m | 16° | 9,0% | 3,5 m |
 
-No talo a nave faz **223 km/h** — a velocidade subiu junto com a pista porque
-`Cap` é medido em VOLTAS por segundo, não em metros: a volta continua levando
-6,25 s, só que agora são 388 m em vez de 232. Para desacelerar sem mexer na
-forma, o botão é `Cfg.Cap` (e o `CAP` equivalente na 2D, com
-`python tests/gerar_referencia.py` depois, senão a paridade quebra).
+Esses números não são estimativa: saem do próprio código, com
 
-Duas decisões de geometria que não são enfeite:
+```powershell
+.\jogar.bat --medir-pistas
+```
+
+- **ANEL DE ÍCARO** é o padrão: reta principal, o S no leste (esquerda rápida,
+  direita fechada, em descida), curvão, reta oposta no fundo do vale e a subida
+  do zênite.
+- **INTERLAGOS ORBITAL** é a homenagem, com os marcos na mesma ordem do
+  original: reta dos boxes, o S, Curva do Sol, Reta Oposta, Descida do Lago,
+  Ferradura, Pinheirinho, Bico de Pato, Mergulho, Junção e Subida dos Boxes. É
+  o único com miolo — a pista entra no meio de si mesma —, e por isso a ÍRIS-9
+  sai do centro e vira lua no horizonte.
+- **ÍCARO BRUTO** é a primeira versão do ÍCARO, guardada como está. O ÍCARO que
+  se joga hoje é *literalmente ela filtrada*: duas passagens de média móvel no
+  polígono de controle, 7% de alargamento para a volta não encolher e 40% do
+  desnível (`Circuito.Suavizar`). Foi assim, e não redesenhando à mão, para as
+  duas não divergirem a cada ajuste. Duas passagens é o teto: na terceira o S
+  deixa de inverter e o circuito vira um oval.
+- **ÓRBITA CLÁSSICA** é a elipse da versão 2D (r = 1 + 0,075·cos 3a), ampliada
+  35% para caber a ÍRIS-9 no miolo.
+
+#### Por que cada pista tem um ritmo
+
+`Speed` é medida em **voltas por segundo**. Sem correção, qualquer traçado
+levaria os mesmos 6,25 s por volta — e o INTERLAGOS ORBITAL, que tem 709 m,
+passaria a 408 km/h. Cada circuito declara um `Ritmo` que multiplica o teto de
+velocidade (0,55 no Interlagos), e é ele que faz 709 m e 387 m darem a mesma
+sensação de velocidade em tela com tempos de volta diferentes. Em 1,0 a conta é
+a de sempre, bit a bit, que é o que mantém a paridade com a versão Python.
+
+#### Como o traçado é feito
+
+Cada circuito é um polígono de controle de uma **B-spline cúbica fechada**
+(`scripts/world/Circuitos.cs`). Duas decisões que não são enfeite:
 
 - **B-spline, não Catmull-Rom.** A inclinação lateral do leito é calculada a
   partir da curvatura. Catmull-Rom é contínua só na primeira derivada, então a
@@ -129,10 +176,18 @@ Duas decisões de geometria que não são enfeite:
   checkpoints deixariam de corresponder a distâncias fixas — que é justamente o
   que os sensores da pista física vão medir.
 
-A inclinação chega a **41°** nas curvas fechadas e cai a zero nas retas. As
-zebras só aparecem acima de 45% da inclinação máxima: como três quartos desta
-volta é curva, um limiar baixo faria a zebra virar moldura da pista inteira e
-deixar de marcar coisa alguma.
+O **lado de fora** da pista é um lado fixo do sentido de percurso, decidido uma
+vez por circuito, e não "o lado oposto ao centro do mundo". A diferença aparece
+no INTERLAGOS ORBITAL: no miolo, a regra radial invertia no meio da volta, as
+duas faixas trocavam de lugar e o leito ganhava uma emenda de cor.
+
+Os **pórticos de checkpoint** são aprumados, e não construídos no quadro
+inclinado do leito. Num trecho de 42° como os do ÍCARO BRUTO, o pórtico tombava
+junto com a pista e lia como peça quebrada — e obrigava a só pôr checkpoint em
+trecho plano. O que manda no espaçamento dos checkpoints é o TEMPO entre um e o
+seguinte (~1,5 s a 2 s), porque é ele que decide de quanto em quanto a caixa
+abre e quanto vale um Escudo; é por isso que o Interlagos tem seis e o Ícaro
+quatro.
 
 ### O visual
 
@@ -614,15 +669,19 @@ A 3D deixou de ser um porte fiel da 2D. O que mudou, e o que continua colado:
 
 | | 2D (pygame) | 3D (Godot) |
 | --- | --- | --- |
-| Traçado | Elipse modulada, 232 m | ANEL DE ÍCARO, 388 m, com o S |
-| Checkpoints | 3 | 4 |
+| Traçado | Elipse modulada, 232 m | Quatro circuitos, 317 a 709 m |
+| Checkpoints | 3 | 3, 4 ou 6, conforme a pista |
 | Escudo | Fica até aparar um ataque | Cai no 2º checkpoint depois de levantado |
-| Velocidade no talo | 134 km/h | 223 km/h |
+| Ritmo | fixo (134 km/h) | por circuito (182 a 225 km/h) |
+| Voltas para vencer | 5 | 3 ou 5, conforme a pista |
+| Fim de corrida | emenda outra | volta ao menu |
 | Acelerador, calor, PWM | **idênticos** | **idênticos** |
 
 A última linha é a que importa e é a que os testes travam: nenhuma dessas
 mudanças toca em `Cap`, `Accel`, `Decel`, `CalorSubida`, `PwmBase` ou na
-máquina de cadência de cliques. A 2D continua sendo a referência da física.
+máquina de cadência de cliques. O ritmo do circuito é um fator que MULTIPLICA o
+teto de velocidade, e vale 1,0 quando ninguém escolheu pista — que é o caso dos
+testes, onde a conta sai bit a bit igual à da versão Python.
 
 Voltar a 3D ao comportamento antigo do Escudo é uma linha: `Cfg.EscudoTrechos`
 alto o bastante para nunca vencer dentro de uma corrida.
@@ -706,6 +765,7 @@ PascalCase.
 | `CHECKPOINTS` | Posição normalizada de cada sensor na volta. **Medir na pista.** |
 | `ROLETA_OPORTUNIDADE` | Quantos segundos a roleta fica aberta após a passagem |
 | `EscudoTrechos` (3D) | Quantas passagens por sensor o Escudo aguenta. Depende do ESPAÇAMENTO dos checkpoints: com sensores mais juntos, subir. |
+| `Ritmo` (3D, por circuito) | Multiplica o teto de velocidade. Numa pista física, é aqui que o comprimento real dela entra. |
 | `SOMBRA_INICIO` / `SOMBRA_FIM` | Trecho da zona de sombra. Só importa se `IRIS_EVENTO_ATIVO` voltar; aí **medir na pista** e marcar fisicamente. |
 | `COMPRIMENTO_VOLTA_M` | Comprimento real da volta (só telemetria) |
 | `PWM_BASE` | Duty que corresponde ao teto base de velocidade |

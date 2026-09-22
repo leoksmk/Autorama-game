@@ -242,7 +242,12 @@ public partial class PistaVisual : Node3D
         for (int k = 0; k <= 32; k++)
         {
             float th = Mathf.Pi * k / 32f;
-            Vector3 d = q.Basis.X * MathF.Cos(th) + q.Basis.Y * (MathF.Sin(th) * alturaRelativa);
+            // Pé no leito, topo NA VERTICAL. Construído no quadro inclinado
+            // inteiro, o pórtico tombava junto com a pista — 25° no INTERLAGOS
+            // ORBITAL, 42° no ÍCARO BRUTO —, o que lia como peça quebrada e
+            // obrigava a escolher checkpoint só em trecho plano. Pórtico de
+            // verdade sobre pista inclinada é aprumado; este também é.
+            Vector3 d = q.Basis.X * MathF.Cos(th) + Vector3.Up * (MathF.Sin(th) * alturaRelativa);
             arco.Add(q.Origin + d * ra);
             arcoLuz.Add(q.Origin + d * (ra - 0.26f));
         }
@@ -284,7 +289,7 @@ public partial class PistaVisual : Node3D
         for (int k = 0; k < _luzesLargada.Length; k++)
         {
             float th = Mathf.Pi / 2f + (k - 2) * 0.16f;
-            Vector3 d = q.Basis.X * MathF.Cos(th) + q.Basis.Y * (MathF.Sin(th) * 0.95f);
+            Vector3 d = q.Basis.X * MathF.Cos(th) + Vector3.Up * (MathF.Sin(th) * 0.95f);
             _luzesLargada[k] = Aceso(new Color(0.4f, 0.05f, 0.04f), 0.25f);
             AddChild(new MeshInstance3D
             {

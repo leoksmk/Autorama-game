@@ -43,6 +43,57 @@ public partial class Asteroides : Node3D
             mmi.CastShadow = ligadas ? GeometryInstance3D.ShadowCastingSetting.On : GeometryInstance3D.ShadowCastingSetting.Off;
     }
 
+    /// <summary>
+    /// Pontos do leito, amostrados uma vez, para conferir se uma pedra caiu em
+    /// cima da pista.
+    ///
+    /// Não bastava afastar a pedra do trecho onde ela nasceu: no INTERLAGOS
+    /// ORBITAL a pista passa dentro de si mesma, e uma pedra a 30 m do lado de
+    /// fora da Curva do Sol aterrissava em cima do Bico de Pato. A conferência
+    /// é contra a VOLTA INTEIRA, não contra o ponto de origem.
+    /// </summary>
+    private static Vector3[] AmostrarLeito()
+    {
+        const int n = 700;          // ~1 m entre amostras nos circuitos atuais
+        var pts = new Vector3[n];
+        for (int i = 0; i < n; i++)
+            pts[i] = Tracado.Centro((double)i / n);
+        return pts;
+    }
+
+    /// <summary>
+    /// Empurra a pedra para longe do trecho de pista mais próximo, se ela tiver
+    /// caído perto demais. Devolve a posição corrigida.
+    ///
+    /// A margem cresce com o tamanho da pedra: uma pedrinha de 20 cm encostada
+    /// no guarda-corpo é cenário, uma de 5 m no mesmo lugar é uma parede.
+    /// </summary>
+    private static Vector3 ForaDaPista(Vector3 pos, float escala, Vector3[] leito)
+    {
+        float margem = Tracado.Largura * 0.5f + 2.5f + escala * 2.2f;
+        int maisPerto = 0;
+        float menor = float.MaxValue;
+        for (int i = 0; i < leito.Length; i++)
+        {
+            float d = pos.DistanceSquaredTo(leito[i]);
+            if (d < menor)
+            {
+                menor = d;
+                maisPerto = i;
+            }
+        }
+        float dist = MathF.Sqrt(menor);
+        if (dist >= margem)
+            return pos;
+
+        Vector3 saida = pos - leito[maisPerto];
+        // Pedra exatamente em cima da linha de centro não tem direção de fuga:
+        // manda para cima, que é onde nunca há pista.
+        if (saida.LengthSquared() < 0.01f)
+            saida = Vector3.Up;
+        return leito[maisPerto] + saida.Normalized() * margem;
+    }
+
     private static MultiMeshInstance3D Campo(ArrayMesh forma, int n, RandomNumberGenerator rng, bool perto)
     {
         var mm = new MultiMesh
@@ -52,6 +103,14 @@ public partial class Asteroides : Node3D
             Mesh = forma,
         };
         mm.InstanceCount = n;
+
+        var leito = AmostrarLeito();
+        // Onde o campo distante começa: fora da caixa do circuito, seja ele
+        // qual for. Com um raio fixo, o INTERLAGOS ORBITAL — que tem 83 m de
+        // meia-largura — nascia com pedras de 9 m de escala em cima da pista.
+        var caixa = Tracado.Caixa;
+        Vector3 meio = caixa.Position + caixa.Size * 0.5f;
+        float raioDoCircuito = MathF.Max(caixa.Size.X, caixa.Size.Z) * 0.5f;
 
         for (int i = 0; i < n; i++)
         {
@@ -68,16 +127,19 @@ public partial class Asteroides : Node3D
                 float longe = Mathf.Clamp((MathF.Abs(off) - 6.5f) / 30f, 0f, 1f);
                 escala = Mathf.Lerp(0.14f, 1.9f, longe * longe) * rng.RandfRange(0.5f, 1.35f);
 
-                var plano = new Vector2(pos.X, pos.Z);
-                if (plano.Length() < Estacao.Raio + 4f)
-                    pos += new Vector3(plano.X, 0f, plano.Y).Normalized() * 6f;
+                pos = ForaDaPista(pos, escala, leito);
+
+                // Pedra que nasceu dentro da estação é empurrada para fora dela.
+                var daEstacao = pos - Tracado.Atual.EstacaoPos;
+                if (daEstacao.Length() < Estacao.RaioAtual + 4f)
+                    pos += daEstacao.Normalized() * (Estacao.RaioAtual + 6f - daEstacao.Length());
             }
             else
             {
                 float a = rng.RandfRange(0f, Mathf.Tau);
-                float r = rng.RandfRange(75f, 170f);
-                pos = new Vector3(MathF.Cos(a) * r, rng.RandfRange(-28f, 22f), MathF.Sin(a) * r);
+                float r = raioDoCircuito + rng.RandfRange(28f, 130f);
                 escala = rng.RandfRange(2.5f, 9f);
+                pos = meio + new Vector3(MathF.Cos(a) * r, rng.RandfRange(-28f, 22f), MathF.Sin(a) * r);
             }
 
             var eixo = new Vector3(rng.RandfRange(-1f, 1f), rng.RandfRange(-1f, 1f), rng.RandfRange(-1f, 1f)).Normalized();

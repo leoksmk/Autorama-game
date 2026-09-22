@@ -40,6 +40,7 @@ public partial class Main : Node3D
     private readonly GerenteSerial _serial = new();
     private readonly IFonteEntrada[] _fontes = new IFonteEntrada[2];
     private readonly bool[] _forcarAcao = new bool[2];
+    private Preferencias _prefs = new();
     private TipoFonte[] _tipos = { TipoFonte.Teclado, TipoFonte.Teclado };
 
     private Corrida _corrida = null!;
@@ -74,14 +75,24 @@ public partial class Main : Node3D
         // a interface IEfeitos não mudou, ganhou um segundo ouvinte.
         _corrida = new Corrida(_saida, new EfeitosCompostos(_fx, _som));
 
+        // O CIRCUITO É ESCOLHIDO ANTES DE O MUNDO NASCER, e não depois: a malha
+        // do leito, os pórticos, o cinturão de pedras e a estação são gerados a
+        // partir da geometria dele. Montar primeiro e escolher depois desenhava
+        // uma pista e corria em outra — a regra e o minimapa já no circuito
+        // novo, o 3D ainda no antigo.
+        //
+        // As preferências entram antes dos argumentos, para que a linha de
+        // comando possa sobrepor a escolha guardada sem gravá-la por cima.
+        _prefs = Preferencias.Carregar();
+        _tipos = _prefs.Fontes;
+        _perfilMotor = _prefs.Motor;
+        _qualidade = _prefs.Qualidade;
+        Tracado.Usar(Circuitos.PorNome(_prefs.Circuito));
+        LerArgumentos(OS.GetCmdlineUserArgs());
+
         _ambiente = new Ambiente();
         AddChild(_ambiente);
-        _estacao = new Estacao();
-        AddChild(_estacao);
-        _pista = new PistaVisual();
-        AddChild(_pista);
-        _asteroides = new Asteroides();
-        AddChild(_asteroides);
+        MontarCircuito();
         _naves = new[] { new NaveVisual(0), new NaveVisual(1) };
         foreach (var n in _naves) AddChild(n);
         _camera = new CameraRig();
@@ -93,16 +104,13 @@ public partial class Main : Node3D
         _hud = new Hud();
         camada.AddChild(_hud);
 
-        _tipos = ConfigControles.Carregar();
-        // A voz salva entra antes dos argumentos, para que --motor= possa
-        // sobrepor a escolha guardada sem gravá-la por cima.
-        _perfilMotor = ConfigMotor.Carregar();
-        LerArgumentos(OS.GetCmdlineUserArgs());
-
         _serial.Iniciar();
         for (int i = 0; i < 2; i++)
             _fontes[i] = CriarFonte(i, _tipos[i]);
 
+        _camera.ModoAtual = _prefs.Camera;
+        if (_prefs.Mudo) _som.AlternarSurdina();
+        MontarConfiguracoes();
         _fx.Configurar(_corrida, _naves, _camera);
         _som.Configurar(_corrida);
         _som.DefinirPerfil(_perfilMotor);
@@ -155,6 +163,19 @@ public partial class Main : Node3D
                 case "som-wav":
                     _exportarSom = string.IsNullOrWhiteSpace(valor) ? OS.GetUserDataDir() : valor;
                     break;
+                case "pista":
+                case "circuito":
+                    foreach (var c in Circuitos.Todos)
+                        if (c.Nome.ToLowerInvariant().Replace(" ", "").Contains(valor.ToLowerInvariant().Replace(" ", "")))
+                        {
+                            Tracado.Usar(c);
+                            break;
+                        }
+                    break;
+                case "medir-pistas":
+                    MedirPistas();
+                    GetTree().Quit();
+                    return;
                 case "motor":
                     _perfilMotor = valor.ToLowerInvariant() is "caca" or "caça" or "nave"
                         ? PerfilMotor.Caca
@@ -181,6 +202,194 @@ public partial class Main : Node3D
             : new FonteTeclado(Key.L, Key.K, "L", "K"),
     };
 
+    /// <summary>
+    /// Mede todos os circuitos e imprime a tabela: comprimento, velocidade em
+    /// tela, raio mínimo, inclinação, rampa e o espaçamento dos checkpoints.
+    ///
+    /// Existe porque nenhum desses números dá para estimar olhando os pontos de
+    /// controle, e porque eles aparecem em comentário no Circuitos.cs — sem um
+    /// jeito de remedir, o comentário viraria ficção no primeiro ajuste. Mede o
+    /// código de verdade, não uma cópia:
+    ///
+    ///     .\jogar.bat --medir-pistas
+    /// </summary>
+    private static void MedirPistas()
+    {
+        GD.Print("circuito             volta  km/h  voltas  raio min  banco  rampa  desnivel  folga CP");
+        foreach (var circuito in Circuitos.Todos)
+        {
+            Tracado.Usar(circuito);
+            const int n = 4000;
+            float rMin = float.MaxValue, bancoMax = 0f, rampaMax = 0f;
+            float yMin = float.MaxValue, yMax = float.MinValue;
+            for (int i = 0; i < n; i++)
+            {
+                double t = (double)i / n;
+                var q = Tracado.Quadro(t);
+                // Raio local pela variação de direção entre duas amostras.
+                var a = Tracado.Quadro(t - 0.0005).Basis.Z;
+                var b = Tracado.Quadro(t + 0.0005).Basis.Z;
+                float giro = a.SignedAngleTo(b, Vector3.Up);
+                float arco = 0.001f * Tracado.Comprimento;
+                if (MathF.Abs(giro) > 1e-5f)
+                    rMin = MathF.Min(rMin, arco / MathF.Abs(giro));
+                bancoMax = MathF.Max(bancoMax, Tracado.Inclinacao(t));
+                rampaMax = MathF.Max(rampaMax, MathF.Abs(q.Basis.Z.Y));
+                yMin = MathF.Min(yMin, q.Origin.Y);
+                yMax = MathF.Max(yMax, q.Origin.Y);
+            }
+            float kmh = (float)(Cfg.Cap * Cfg.RitmoDoCircuito) * Tracado.Comprimento * 3.6f;
+
+            var folgas = new System.Text.StringBuilder();
+            for (int i = 0; i < circuito.Checkpoints.Length; i++)
+            {
+                double prox = circuito.Checkpoints[(i + 1) % circuito.Checkpoints.Length];
+                double d = Pista.Mod1(prox - circuito.Checkpoints[i]);
+                folgas.Append($"{d / (Cfg.Cap * Cfg.RitmoDoCircuito):0.00}s/{Mathf.RadToDeg(Tracado.Inclinacao(circuito.Checkpoints[i])):0}° ");
+            }
+
+            GD.Print($"{circuito.Nome,-20} {Tracado.Comprimento,5:0} m {kmh,5:0} {circuito.Voltas,6}"
+                   + $" {rMin,8:0.0} m {Mathf.RadToDeg(bancoMax),5:0}° {rampaMax * 100,5:0.0}%"
+                   + $" {yMax - yMin,8:0.0} m  {folgas}");
+        }
+    }
+
+    /// <summary>Cria a estação, a pista e as pedras a partir do circuito em uso.</summary>
+    private void MontarCircuito()
+    {
+        _estacao = new Estacao();
+        AddChild(_estacao);
+        _pista = new PistaVisual();
+        AddChild(_pista);
+        _asteroides = new Asteroides();
+        AddChild(_asteroides);
+    }
+
+    /// <summary>
+    /// Troca a pista. Tudo que foi GERADO a partir da geometria tem de nascer
+    /// de novo: a malha do leito, os pórticos, o cinturão de pedras, a estação
+    /// (que muda de lugar e de tamanho) e a planta do minimapa. Por isso a
+    /// troca só acontece no menu, e nunca no meio de uma corrida.
+    /// </summary>
+    private void AplicarCircuito(Circuito c)
+    {
+        if (ReferenceEquals(Tracado.Atual, c))
+            return;
+
+        Tracado.Usar(c);
+        _prefs.Circuito = c.Nome;
+
+        _pista.QueueFree();
+        _asteroides.QueueFree();
+        _estacao.QueueFree();
+        MontarCircuito();
+
+        AplicarQualidade(_qualidade);
+        _hud.EsquecerMapa();
+        _corrida.Reiniciar();
+        _pista.LuzesLargada(0, false);
+    }
+
+    /// <summary>
+    /// As opções da tela de configurações. Cada uma lê e escreve no mesmo lugar
+    /// que a tecla de atalho equivalente, então mudar pelo painel e mudar por
+    /// C / Q / M / N são o mesmo caminho — não há dois estados para sincronizar.
+    /// </summary>
+    private void MontarConfiguracoes()
+    {
+        var cfg = _hud.Config;
+
+        cfg.Acrescentar(new Opcao
+        {
+            Rotulo = "Pista",
+            Valor = () => Tracado.Atual.Nome,
+            Detalhe = () => Tracado.Atual.Resumo,
+            Mudar = d =>
+            {
+                int i = Circuitos.IndiceDe(Tracado.Atual) + d;
+                i = (i % Circuitos.Todos.Length + Circuitos.Todos.Length) % Circuitos.Todos.Length;
+                AplicarCircuito(Circuitos.Todos[i]);
+            },
+        });
+
+        for (int lane = 0; lane < 2; lane++)
+        {
+            int l = lane;
+            cfg.Acrescentar(new Opcao
+            {
+                Rotulo = l == 0 ? $"Controle de {Cfg.NomeP1}" : $"Controle de {Cfg.NomeP2}",
+                Valor = () => ConfigControles.Nome(_tipos[l]),
+                Detalhe = () => _fontes[l].Descricao,
+                Mudar = _ => TrocarFonte(l),
+            });
+        }
+
+        cfg.Acrescentar(new Opcao
+        {
+            Rotulo = "Som",
+            Valor = () => _som.EmSurdina ? "mudo" : "ligado",
+            Mudar = _ => { _som.AlternarSurdina(); _prefs.Mudo = _som.EmSurdina; },
+        });
+
+        cfg.Acrescentar(new Opcao
+        {
+            Rotulo = "Voz dos motores",
+            Valor = () => _som.NomeDoPerfil,
+            Detalhe = () => _perfilMotor == PerfilMotor.Propulsor ? "grave e encorpada" : "aguda e seca",
+            Mudar = _ =>
+            {
+                _som.ProximoPerfil();
+                _perfilMotor = _som.Perfil;
+                _prefs.Motor = _perfilMotor;
+            },
+        });
+
+        cfg.Acrescentar(new Opcao
+        {
+            Rotulo = "Qualidade gráfica",
+            Valor = () => Ambiente.Nome(_qualidade),
+            Detalhe = () => _qualidade switch
+            {
+                Ambiente.Qualidade.Alta => "névoa, reflexos, oclusão, sombras em 4 cascatas",
+                Ambiente.Qualidade.Media => "sem névoa volumétrica, 2 cascatas",
+                _ => "sem reflexos nem oclusão, sem antisserrilhado",
+            },
+            Mudar = d =>
+            {
+                int i = ((int)_qualidade + d + 3) % 3;
+                AplicarQualidade((Ambiente.Qualidade)i);
+                _prefs.Qualidade = _qualidade;
+            },
+        });
+
+        cfg.Acrescentar(new Opcao
+        {
+            Rotulo = "Câmera",
+            Valor = () => CameraRig.NomeDoModo(_camera.ModoAtual),
+            Mudar = d =>
+            {
+                int i = ((int)_camera.ModoAtual + d + 3) % 3;
+                _camera.ModoAtual = (CameraRig.Modo)i;
+                _prefs.Camera = _camera.ModoAtual;
+            },
+        });
+
+        cfg.Acrescentar(new Opcao
+        {
+            Rotulo = "Fechar",
+            Valor = () => "voltar ao menu",
+            Detalhe = () => "e correr",
+            Mudar = _ => cfg.Fechar(),
+        });
+
+        cfg.AoMudar = () =>
+        {
+            _prefs.Fontes = _tipos;
+            _prefs.Salvar();
+            _som.Interface();
+        };
+    }
+
     private void AplicarQualidade(Ambiente.Qualidade q)
     {
         _qualidade = q;
@@ -201,6 +410,7 @@ public partial class Main : Node3D
 
     private void IniciarContagem()
     {
+        _hud.Config.Fechar();
         _corrida.Reiniciar();
         _contagem = Cfg.ContagemDuracao;
         _espera = 0;
@@ -213,7 +423,8 @@ public partial class Main : Node3D
         if (_estado is not (EstadoApp.Atracao or EstadoApp.Resultado)) return;
         _tipos[lane] = ConfigControles.Proximo(_tipos[lane]);
         _fontes[lane] = CriarFonte(lane, _tipos[lane]);
-        ConfigControles.Salvar(_tipos);
+        _prefs.Fontes = _tipos;
+        _prefs.Salvar();
         _som.Interface();
     }
 
@@ -239,8 +450,24 @@ public partial class Main : Node3D
         {
             case EstadoApp.Atracao:
                 _relogioDemo += dt;
-                if (p1.Acao || p2.Acao || (_demo && _captura is null && _relogioDemo > 6))
+                if (_hud.Config.Aberta)
+                {
+                    // Os dois botões do controle ESP navegam o painel inteiro:
+                    // acelerador desce de linha, ação muda o valor. É o único
+                    // jeito de configurar numa feira, onde ninguém tem mouse
+                    // nem teclado à mão — e a última linha do painel fecha.
+                    if (p1.Acelerador || p2.Acelerador)
+                    {
+                        _hud.Config.Mover(1);
+                        _som.Interface();
+                    }
+                    if (p1.Acao || p2.Acao)
+                        _hud.Config.Mudar(1);
+                }
+                else if (p1.Acao || p2.Acao || (_demo && _captura is null && _relogioDemo > 6))
+                {
                     IniciarContagem();
+                }
                 break;
 
             case EstadoApp.Contagem:
@@ -266,9 +493,12 @@ public partial class Main : Node3D
                 break;
 
             case EstadoApp.Resultado:
+                // Acabou a corrida, volta ao menu — nunca emenda outra sozinho.
+                // Numa feira é ali que o próximo jogador escolhe pista e
+                // controle; cair direto na contagem tirava essa chance dele.
                 _relogioDemo += dt;
                 if (p1.Acao || p2.Acao || (_demo && _captura is null && _relogioDemo > 8))
-                    IniciarContagem();
+                    EntrarAtracao();
                 break;
         }
 
@@ -333,9 +563,24 @@ public partial class Main : Node3D
 
     public override void _UnhandledInput(InputEvent evento)
     {
+        if (evento is InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.Left } clique)
+        {
+            TratarClique(clique.Position);
+            return;
+        }
+
         if (evento is not InputEventKey { Pressed: true, Echo: false } k) return;
+
+        // Com o painel aberto ele fica com o teclado inteiro, menos o que
+        // continua valendo em qualquer tela (tela cheia, FPS, sair).
+        if (_hud.Config.Aberta && TeclaDasConfiguracoes(k.PhysicalKeycode))
+            return;
+
         switch (k.PhysicalKeycode)
         {
+            case Key.Tab:
+                AlternarConfiguracoes();
+                break;
             case Key.Escape:
                 GetTree().Quit();
                 break;
@@ -386,6 +631,84 @@ public partial class Main : Node3D
         }
     }
 
+    /// <summary>
+    /// Teclas do painel de configurações. Devolve false para a tecla seguir o
+    /// caminho normal — é assim que F11, F3 e Esc continuam funcionando com o
+    /// painel aberto.
+    /// </summary>
+    private bool TeclaDasConfiguracoes(Key tecla)
+    {
+        var cfg = _hud.Config;
+        switch (tecla)
+        {
+            case Key.Up:
+                cfg.Mover(-1);
+                _som.Interface();
+                return true;
+            case Key.Down:
+                cfg.Mover(1);
+                _som.Interface();
+                return true;
+            case Key.Left:
+                cfg.Mudar(-1);
+                return true;
+            case Key.Right:
+                cfg.Mudar(1);
+                return true;
+            case Key.Enter:
+            case Key.KpEnter:
+            case Key.Space:
+            case Key.Tab:
+                cfg.Fechar();
+                _som.Interface();
+                return true;
+            case Key.Escape:
+                // Esc fecha o painel; só fora dele é que ele sai do jogo.
+                cfg.Fechar();
+                _som.Interface();
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    private void AlternarConfiguracoes()
+    {
+        if (_estado is not (EstadoApp.Atracao or EstadoApp.Resultado))
+            return;
+        _hud.Config.Alternar();
+        _som.Interface();
+    }
+
+    /// <summary>
+    /// Clique do mouse. A engrenagem abre e fecha; dentro do painel, a metade
+    /// direita de uma linha avança a opção e a esquerda volta — o mesmo que as
+    /// setas fazem, para quem estiver com a mão no mouse.
+    /// </summary>
+    private void TratarClique(Vector2 pos)
+    {
+        var cfg = _hud.Config;
+
+        if (cfg.Aberta)
+        {
+            int linha = _hud.LinhaConfigEm(pos);
+            if (linha >= 0)
+            {
+                cfg.Selecionar(linha);
+                cfg.Mudar(_hud.DirecaoConfigEm(pos, linha));
+            }
+            else if (!_hud.RectEngrenagem().HasPoint(pos))
+            {
+                cfg.Fechar();   // clicou fora do cartão
+                _som.Interface();
+            }
+            return;
+        }
+
+        if (_estado == EstadoApp.Atracao && _hud.RectEngrenagem().HasPoint(pos))
+            AlternarConfiguracoes();
+    }
+
     public override void _Notification(int what)
     {
         if (what == NotificationWMCloseRequest || what == NotificationPredelete)
@@ -434,7 +757,11 @@ public partial class Main : Node3D
             }
             _roteiro = new (double, string?, Action?)[]
             {
-                (3.0, "01_atracao", null),
+                (2.0, "01_atracao", null),
+                (2.2, null, () => c._hud.Config.Abrir()),
+                (2.6, "01b_configuracoes", null),
+                (2.8, null, () => { c._hud.Config.Mover(3); }),
+                (3.0, "01c_configuracoes_som", null),
                 (3.2, null, () => c.IniciarContagem()),
                 (4.8, "02_contagem", null),
                 (11.0, "03_corrida", null),

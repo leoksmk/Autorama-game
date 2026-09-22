@@ -37,7 +37,7 @@ public partial class Hud : Control
         public double Duracao, Idade;
     }
 
-    private enum Vidro { P1, P2, Caixa1, Caixa2, Telemetria, Cartao, Mapa }
+    private enum Vidro { P1, P2, Caixa1, Caixa2, Telemetria, Cartao, Mapa, Config }
 
     public Font Fonte { get; private set; } = null!;
     public Font FonteForte { get; private set; } = null!;
@@ -53,7 +53,7 @@ public partial class Hud : Control
     private readonly float[] _desvio = new float[2];
     private readonly float[] _livre = { 1f, 1f };
     public AncoraNave[] Ancoras { get; set; } = new AncoraNave[2];
-    private readonly Panel[] _vidros = new Panel[7];
+    private readonly Panel[] _vidros = new Panel[8];
     private StyleBoxFlat _borda = null!;
     private StyleBoxFlat _preenche = null!;
 
@@ -63,6 +63,9 @@ public partial class Hud : Control
     private Vector2[] _mapaCp = Array.Empty<Vector2>();
     private Vector2[] _mapaCpNormal = Array.Empty<Vector2>();
     private Vector2 _mapaLargada, _mapaLargadaNormal;
+
+    /// <summary>A tela de configurações. O Main monta as opções e trata a entrada.</summary>
+    public Configuracoes Config { get; } = new();
 
     private EstadoApp _estado;
     private double _contagem, _t;
@@ -116,6 +119,13 @@ public partial class Hud : Control
         _fontes = fontes;
         _serial = serial;
     }
+
+    /// <summary>
+    /// Joga fora a planta do circuito. Chamado ao trocar de pista: o traçado
+    /// é medido uma vez e guardado, então sem isto o mapa continuaria mostrando
+    /// a pista anterior.
+    /// </summary>
+    public void EsquecerMapa() => _mapaLinha = null;
 
     public void Atualizar(double dt, EstadoApp estado, double contagem, string modoCamera)
     {
@@ -191,6 +201,35 @@ public partial class Hud : Control
         return lane == 0 ? new Rect2(28f, 28f, w, h) : new Rect2(Tela.X - 28f - w, 28f, w, h);
     }
 
+    /// <summary>A engrenagem, no alto da tela inicial. Só aparece no menu.</summary>
+    public Rect2 RectEngrenagem() => new(Tela.X - 104f, 40f, 64f, 64f);
+
+    private Rect2 RectConfig()
+    {
+        float h = 170f + Config.Opcoes.Count * 62f;
+        const float w = 940f;
+        return new Rect2((Tela.X - w) / 2f, (Tela.Y - h) / 2f, w, h);
+    }
+
+    private Rect2 RectLinhaConfig(int i)
+    {
+        var r = RectConfig();
+        return new Rect2(r.Position.X + 28f, r.Position.Y + 112f + i * 62f, r.Size.X - 56f, 56f);
+    }
+
+    /// <summary>Qual linha das configurações está sob o ponto, ou -1.</summary>
+    public int LinhaConfigEm(Vector2 pos)
+    {
+        for (int i = 0; i < Config.Opcoes.Count; i++)
+            if (RectLinhaConfig(i).HasPoint(pos))
+                return i;
+        return -1;
+    }
+
+    /// <summary>Metade direita de uma linha avança a opção; a esquerda, volta.</summary>
+    public int DirecaoConfigEm(Vector2 pos, int linha) =>
+        pos.X > RectLinhaConfig(linha).GetCenter().X ? 1 : -1;
+
     /// <summary>Minimapa: canto de baixo à esquerda, logo acima da telemetria.</summary>
     private Rect2 RectMapa()
     {
@@ -238,7 +277,8 @@ public partial class Hud : Control
                     _estado == EstadoApp.Corrida && _corrida!.Naves[lane].Roleta.Visivel, RectCaixa(lane));
         Mostrar(Vidro.Telemetria, true, RectTelemetria());
         Mostrar(Vidro.Mapa, jogo, RectMapa());
-        Mostrar(Vidro.Cartao, _estado is EstadoApp.Atracao or EstadoApp.Resultado,
+        Mostrar(Vidro.Config, Config.Aberta, RectConfig());
+        Mostrar(Vidro.Cartao, !Config.Aberta && _estado is EstadoApp.Atracao or EstadoApp.Resultado,
                 _estado == EstadoApp.Atracao ? RectCartaoAtracao() : RectCartaoResultado());
     }
 
@@ -353,7 +393,12 @@ public partial class Hud : Control
 
         switch (_estado)
         {
-            case EstadoApp.Atracao: TelaAtracao(c); break;
+            // Com as configurações abertas, o cartão do menu sai de cena: os
+            // dois ocupam o mesmo meio da tela e um por cima do outro não se lê.
+            case EstadoApp.Atracao:
+                if (!Config.Aberta) TelaAtracao(c);
+                Engrenagem(c);
+                break;
             case EstadoApp.Contagem: TelaContagem(c); break;
             case EstadoApp.Resultado: TelaResultado(c); break;
             case EstadoApp.Corrida when _corrida.Tempo < 0.9:
@@ -363,8 +408,89 @@ public partial class Hud : Control
                 break;
         }
 
+        if (Config.Aberta)
+            TelaConfig(c);
+
         if (MostrarFps)
             TextoDir(c, $"{Engine.GetFramesPerSecond():0} fps", Tela.X - 24f, 22f, 16, Fraco);
+    }
+
+    // -- configurações --------------------------------------------------------------------
+
+    /// <summary>
+    /// A engrenagem. Desenhada em vetor como todo o resto — nenhum ícone vem de
+    /// arquivo —, e pulsando de leve quando o painel está fechado, para quem
+    /// nunca abriu perceber que dá para clicar.
+    /// </summary>
+    private void Engrenagem(CanvasItem c)
+    {
+        var r = RectEngrenagem();
+        var centro = r.GetCenter();
+        float raio = r.Size.X * 0.34f;
+        Color cor = Config.Aberta ? Paleta.Texto : Pulsando(2.2f);
+
+        const int dentes = 8;
+        for (int k = 0; k < dentes; k++)
+        {
+            float a = k * Mathf.Tau / dentes + (float)_t * 0.25f;
+            var dir = new Vector2(MathF.Cos(a), MathF.Sin(a));
+            var lado = new Vector2(-dir.Y, dir.X) * (raio * 0.26f);
+            c.DrawColoredPolygon(new[]
+            {
+                centro + dir * raio * 0.82f - lado,
+                centro + dir * raio * 1.34f - lado * 0.6f,
+                centro + dir * raio * 1.34f + lado * 0.6f,
+                centro + dir * raio * 0.82f + lado,
+            }, cor);
+        }
+        c.DrawArc(centro, raio * 0.92f, 0f, Mathf.Tau, 36, cor, raio * 0.3f, true);
+        c.DrawArc(centro, raio * 0.42f, 0f, Mathf.Tau, 24, cor, raio * 0.18f, true);
+        TextoCentro(c, "configurações", centro.X, r.End.Y + 4f, 16, Fraco);
+    }
+
+    private void TelaConfig(CanvasItem c)
+    {
+        var r = RectConfig();
+        TextoCentro(c, "ORBITAL DERBY", Tela.X / 2f, r.Position.Y - 108f, 76, Paleta.Texto, true);
+        Borda(c, r, Neutra);
+        Texto(c, "CONFIGURAÇÕES", r.Position + new Vector2(30f, 58f), 40, Paleta.Texto, true);
+        TextoDir(c, "vale para a próxima corrida", r.End.X - 30f, r.Position.Y + 34f, 18, Fraco);
+        c.DrawLine(r.Position + new Vector2(30f, 78f), new Vector2(r.End.X - 30f, r.Position.Y + 78f), Neutra, 1f);
+
+        for (int i = 0; i < Config.Opcoes.Count; i++)
+        {
+            var linha = RectLinhaConfig(i);
+            var o = Config.Opcoes[i];
+            bool aqui = i == Config.Linha;
+
+            if (aqui)
+            {
+                _preenche.BgColor = new Color(Paleta.Estacao, 0.20f);
+                c.DrawStyleBox(_preenche, linha);
+                Borda(c, linha, new Color(Paleta.Estacao.Lerp(Paleta.Texto, 0.4f), 0.8f), 2);
+            }
+
+            float x = linha.Position.X + 24f;
+            Texto(c, o.Rotulo, new Vector2(x, linha.Position.Y + 36f), 24, aqui ? Paleta.Texto : Fraco);
+
+            // As setas só aparecem na linha escolhida: em todas, o cartão vira
+            // uma parede de sinais e some a noção de onde o foco está.
+            float xv = linha.Position.X + 300f;
+            if (aqui)
+            {
+                Texto(c, "‹", new Vector2(xv - 34f, linha.Position.Y + 38f), 30, Paleta.Estacao.Lerp(Paleta.Texto, 0.6f), true);
+                TextoDir(c, "›", linha.End.X - 18f, linha.Position.Y + 38f, 30, Paleta.Estacao.Lerp(Paleta.Texto, 0.6f), true);
+            }
+            Texto(c, o.Valor(), new Vector2(xv, linha.Position.Y + 36f), 26, aqui ? Paleta.Texto : Paleta.Texto.Lerp(Fraco, 0.4f), true);
+
+            string detalhe = o.Detalhe();
+            if (!string.IsNullOrEmpty(detalhe) && detalhe != o.Valor())
+                Texto(c, detalhe, new Vector2(xv + Largura(o.Valor(), 26, true) + 18f, linha.Position.Y + 34f), 17, Fraco);
+        }
+
+        c.DrawLine(new Vector2(r.Position.X + 30f, r.End.Y - 52f), new Vector2(r.End.X - 30f, r.End.Y - 52f), Neutra, 1f);
+        TextoCentro(c, "↑ ↓ escolhe   ·   ← → muda   ·   clique também vale   ·   Esc ou Enter fecha",
+                    r.GetCenter().X, r.End.Y - 38f, 19, Fraco);
     }
 
     /// <summary>
