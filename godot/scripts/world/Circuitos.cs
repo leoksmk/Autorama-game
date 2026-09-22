@@ -53,9 +53,10 @@ public static class Circuitos
     public static readonly Circuito Icaro = new()
     {
         Nome = "ANEL DE ÍCARO",
-        Resumo = "387 m · o S no leste, subida longa no oeste · equilibrado",
+        Resumo = "387 m · o S no leste, subida longa no oeste · 9,6 s por volta",
         Controle = Circuito.Suavizar(IcaroBruto, 2, escalaXZ: 1.07f, escalaY: 0.40f),
         Checkpoints = new[] { 0.14, 0.35, 0.60, 0.83 },
+        Ritmo = 0.65,
         InclinacaoMax = 0.42f,
         RaioDeReferencia = 26f,
     };
@@ -72,6 +73,7 @@ public static class Circuitos
         Resumo = "387 m · o mesmo desenho sem filtro: 42° de banco, 19% de rampa",
         Controle = IcaroBruto,
         Checkpoints = new[] { 0.14, 0.35, 0.60, 0.83 },
+        Ritmo = 0.65,
         InclinacaoMax = 0.85f,
         RaioDeReferencia = 18f,
     };
@@ -86,13 +88,13 @@ public static class Circuitos
     /// si mesma. Por isso a ÍRIS-9 sai do centro e vai para cima — no centro ela
     /// ficaria em cima do Bico de Pato.
     ///
-    /// Ritmo 0,55 porque 709 m a 6,25 s de volta dariam 408 km/h. Com o fator,
-    /// a volta leva 11,3 s a 225 km/h, e por isso são 3 voltas e não 5.
+    /// Ritmo 0,367 porque 709 m no teto cru dariam 408 km/h. Com o fator, a
+    /// volta leva 17 s a 150 km/h, e por isso são 3 voltas e não 5.
     /// </summary>
     public static readonly Circuito Interlagos = new()
     {
         Nome = "INTERLAGOS ORBITAL",
-        Resumo = "709 m · anel externo e miolo lento · 3 voltas",
+        Resumo = "709 m · anel externo e miolo lento · 17 s por volta, 3 voltas",
         Controle = new Vector3[]
         {
             // -- reta dos boxes, rumo leste, subindo
@@ -129,7 +131,7 @@ public static class Circuitos
         // durava 2,9 s — a caixa de item abria raro e o Escudo chegava a valer
         // 7 s. Com seis são ~1,9 s por trecho, o mesmo ritmo do ANEL DE ÍCARO.
         Checkpoints = new[] { 0.06, 0.23, 0.40, 0.56, 0.72, 0.88 },
-        Ritmo = 0.55,
+        Ritmo = 0.367,
         Voltas = 3,
         Largura = 9f,            // circuito mais estreito: o miolo tem 10 m de raio
         OffsetFaixa = 2.2f,
@@ -149,9 +151,10 @@ public static class Circuitos
     public static readonly Circuito Classica = new()
     {
         Nome = "ÓRBITA CLÁSSICA",
-        Resumo = "318 m · a elipse da versão 2D · 183 km/h, para aprender",
+        Resumo = "317 m · a elipse da versão 2D · a mais curta, para aprender",
         Controle = Elipse(28, 59.4f, 39.2f, 0.075f, 3, 1.8f),
         Checkpoints = new[] { 0.12, 0.45, 0.78 },
+        Ritmo = 0.69,
         InclinacaoMax = 0.30f,
         RaioDeReferencia = 30f,
         EstacaoRaio = 13f,

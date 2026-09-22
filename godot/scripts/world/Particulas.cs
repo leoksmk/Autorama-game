@@ -93,16 +93,24 @@ public static class Particulas
     // -- contínuas (presas à nave) ---------------------------------------------------
 
     /// <summary>Jato do motor: rastro que fica para trás enquanto a nave anda.</summary>
-    public static GpuParticles3D Exaustao(Color cor, float largura)
+    /// <summary>
+    /// Rastro do motor. <paramref name="escala"/> é o tamanho da nave.
+    ///
+    /// Tem de ser passado à mão porque estes emissores usam LocalCoords = false
+    /// — as partículas vivem no mundo, não na nave —, e por isso a escala do nó
+    /// pai não as alcança. Sem isto, encolher a nave deixava o rastro maior que
+    /// ela.
+    /// </summary>
+    public static GpuParticles3D Exaustao(Color cor, float largura, float escala = 1f)
     {
         var pm = new ParticleProcessMaterial
         {
             EmissionShape = ParticleProcessMaterial.EmissionShapeEnum.Box,
-            EmissionBoxExtents = new Vector3(largura, 0.04f, 0.45f),   // alongada: preenche o vão entre frames
+            EmissionBoxExtents = new Vector3(largura, 0.04f, 0.45f) * escala,   // alongada: preenche o vão entre frames
             Direction = new Vector3(0, 0, 1),
             Spread = 5f,
-            InitialVelocityMin = 3f,
-            InitialVelocityMax = 5f,
+            InitialVelocityMin = 3f * escala,
+            InitialVelocityMax = 5f * escala,
             Gravity = Vector3.Zero,
             DampingMin = 2f,
             DampingMax = 3f,
@@ -111,16 +119,16 @@ public static class Particulas
             ScaleCurve = Curva(new Vector2(0f, 0.5f), new Vector2(0.2f, 1f), new Vector2(1f, 0.1f)),
             ColorRamp = Rampa((0f, Hdr(new Color(1f, 0.97f, 0.9f), 1.2f)), (0.25f, Hdr(cor, 0.9f)), (1f, Transparente(Hdr(cor, 0.6f)))),
         };
-        return Emissor(300, 0.5, pm, 0.28f, aditivo: true);
+        return Emissor(300, 0.5, pm, 0.28f * escala, aditivo: true);
     }
 
     /// <summary>Fumaça escura saindo do motor (superaquecido ou atingido pelo tiro).</summary>
-    public static GpuParticles3D FumacaContinua()
+    public static GpuParticles3D FumacaContinua(float escala = 1f)
     {
         var pm = new ParticleProcessMaterial
         {
             EmissionShape = ParticleProcessMaterial.EmissionShapeEnum.Sphere,
-            EmissionSphereRadius = 0.15f,
+            EmissionSphereRadius = 0.15f * escala,
             Direction = new Vector3(0, 0.4f, 1),
             Spread = 25f,
             InitialVelocityMin = 0.6f,
@@ -133,7 +141,7 @@ public static class Particulas
             ScaleCurve = Curva(new Vector2(0f, 0.3f), new Vector2(1f, 1.6f)),
             ColorRamp = Rampa((0f, new Color(0.25f, 0.23f, 0.22f, 0f)), (0.15f, new Color(0.22f, 0.2f, 0.2f, 0.55f)), (1f, new Color(0.12f, 0.12f, 0.13f, 0f))),
         };
-        return Emissor(46, 1.6, pm, 0.9f, aditivo: false);
+        return Emissor(46, 1.6, pm, 0.9f * escala, aditivo: false);
     }
 
     // -- rajadas únicas ---------------------------------------------------------------

@@ -14,6 +14,17 @@ namespace OrbitalDerby.Mundo;
 
 public partial class NaveVisual : Node3D
 {
+    /// <summary>
+    /// Tamanho da nave. Vale para o casco e para tudo que é filho dele — bocais,
+    /// escudo, luz do motor —, e é passado à mão para as partículas, que vivem
+    /// em coordenadas do mundo e não seguem a escala do pai.
+    ///
+    /// 0,85 e não 1,25: a 3,2 m o ÍON ocupava metade da faixa dele e a pista
+    /// lia como corredor. A 2,2 m sobra leito em volta e o circuito aparenta o
+    /// tamanho que tem.
+    /// </summary>
+    public const float Escala = 0.85f;
+
     public int Lane { get; private set; }
 
     private Node3D _corpo = null!;              // recebe balanço, arfagem e tremor
@@ -39,7 +50,7 @@ public partial class NaveVisual : Node3D
     public override void _Ready()
     {
         _cor = Paleta.DoJogador(Lane);
-        _corpo = new Node3D { Scale = Vector3.One * 1.25f };
+        _corpo = new Node3D { Scale = Vector3.One * Escala };
         AddChild(_corpo);
         if (Lane == 0) ConstruirIon(); else ConstruirIgnis();
         ConstruirMotor();
@@ -296,11 +307,11 @@ public partial class NaveVisual : Node3D
         }
         centro /= Math.Max(1, _bocais.Length);
 
-        _exaustao = Particulas.Exaustao(_cor, _bocais.Length > 1 ? 0.2f : 0.1f);
+        _exaustao = Particulas.Exaustao(_cor, _bocais.Length > 1 ? 0.2f : 0.1f, Escala);
         _exaustao.Position = centro + Vector3.Back * 0.55f;    // a caixa de emissão começa no bocal
         _corpo.AddChild(_exaustao);
 
-        _fumaca = Particulas.FumacaContinua();
+        _fumaca = Particulas.FumacaContinua(Escala);
         _fumaca.Position = centro;
         _fumaca.Emitting = false;
         _corpo.AddChild(_fumaca);

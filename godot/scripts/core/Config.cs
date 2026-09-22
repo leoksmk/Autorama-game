@@ -123,7 +123,14 @@ public static class Cfg
         (Item.Nada, 18),
     };
 
-    public const double BombaDuracao = 2.0;          // PWM do alvo zerado
+    // Bomba e Tiro são os únicos efeitos contados em SEGUNDOS, e por isso os
+    // únicos que mudam de peso quando o ritmo da pista muda: tudo mais que
+    // importa — alcance do ataque, prazo do Escudo, espaçamento dos sensores —
+    // é medido em pista e escala sozinho. Ao baixar o ritmo para ~0,65, dois
+    // segundos parados passaram a custar 35% menos distância ao alvo. Os
+    // valores abaixo devolvem parte disso, e só parte: compensar inteiro daria
+    // 3,1 s de nave parada sem fazer nada, que é punição e não jogada.
+    public const double BombaDuracao = 2.4;          // PWM do alvo zerado
     // Tempo de voo: o efeito só vale na CHEGADA, então dá para levantar o
     // Escudo com a bomba no ar. É regra, não animação.
     public const double BombaVoo = 0.55;
@@ -134,7 +141,7 @@ public static class Cfg
     public const double BombaAlcance = 0.12;
 
     public const double TiroMult = 0.45;             // teto de PWM do alvo
-    public const double TiroDuracao = 2.5;
+    public const double TiroDuracao = 3.0;
 
     // O Escudo não dura para sempre: ele cai numa PASSAGEM POR SENSOR, como
     // tudo mais que é temporal neste jogo. EscudoTrechos é quantas passagens
@@ -167,7 +174,7 @@ public static class Cfg
     public static string DescricaoItem(Item item) => item switch
     {
         Item.Tiro => "deixa o adversário lento",
-        Item.Bomba => "para o adversário por 2 s",
+        Item.Bomba => "para o adversário por 2,4 s",
         Item.Escudo => "bloqueia um ataque até o próximo checkpoint",
         _ => "a caixa veio vazia",
     };

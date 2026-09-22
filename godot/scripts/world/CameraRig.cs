@@ -103,8 +103,10 @@ public partial class CameraRig : Node3D
         {
             var nave = naves[lider];
             var b = nave.GlobalTransform.Basis;
-            posAlvo = nave.GlobalPosition + b.Z * 10f + b.Y * 3.4f;
-            olharAlvo = nave.GlobalPosition - b.Z * 7f + b.Y * 0.8f;
+            // As distâncias acompanham o tamanho da nave: com ela em 0,85 e a
+            // câmera onde estava, a nave virava um ponto no meio da pista.
+            posAlvo = nave.GlobalPosition + (b.Z * 10f + b.Y * 3.4f) * NaveVisual.Escala;
+            olharAlvo = nave.GlobalPosition + (-b.Z * 7f + b.Y * 0.8f) * NaveVisual.Escala;
             // O campo abre com o empuxo: a 220 km/h a periferia correndo é o
             // que dá sensação de velocidade, e é de graça — nenhum efeito de tela.
             fov = 60f + 13f * nave.Empuxo;

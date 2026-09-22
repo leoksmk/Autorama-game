@@ -122,12 +122,12 @@ cima) e **perseguição** (atrás do líder).
 A 3D tem quatro pistas. A escolha é feita no menu (engrenagem no alto) ou por
 `--pista=`, e vale a partir da corrida seguinte.
 
-| Circuito | Volta | Em tela | Voltas | Raio mín. | Banco | Rampa | Desnível |
+| Circuito | Volta | Em tela | Volta em | Prova | Raio mín. | Banco | Rampa |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| **ANEL DE ÍCARO** | 387 m | 223 km/h | 5 | 16,6 m | 22° | 7,6% | 5,3 m |
-| **INTERLAGOS ORBITAL** | 709 m | 225 km/h | 3 | 10,3 m | 25° | 9,6% | 5,0 m |
-| **ÍCARO BRUTO** | 387 m | 223 km/h | 5 | 14,3 m | 42° | 18,6% | 13,7 m |
-| **ÓRBITA CLÁSSICA** | 317 m | 182 km/h | 5 | 17,0 m | 16° | 9,0% | 3,5 m |
+| **ANEL DE ÍCARO** | 387 m | 145 km/h | 9,6 s | 5 voltas, ~48 s | 16,6 m | 22° | 7,6% |
+| **INTERLAGOS ORBITAL** | 709 m | 150 km/h | 17,0 s | 3 voltas, ~51 s | 10,3 m | 25° | 9,6% |
+| **ÍCARO BRUTO** | 387 m | 145 km/h | 9,6 s | 5 voltas, ~48 s | 14,3 m | 42° | 18,6% |
+| **ÓRBITA CLÁSSICA** | 317 m | 126 km/h | 9,1 s | 5 voltas, ~46 s | 17,0 m | 16° | 9,0% |
 
 Esses números não são estimativa: saem do próprio código, com
 
@@ -157,9 +157,20 @@ Esses números não são estimativa: saem do próprio código, com
 `Speed` é medida em **voltas por segundo**. Sem correção, qualquer traçado
 levaria os mesmos 6,25 s por volta — e o INTERLAGOS ORBITAL, que tem 709 m,
 passaria a 408 km/h. Cada circuito declara um `Ritmo` que multiplica o teto de
-velocidade (0,55 no Interlagos), e é ele que faz 709 m e 387 m darem a mesma
-sensação de velocidade em tela com tempos de volta diferentes. Em 1,0 a conta é
-a de sempre, bit a bit, que é o que mantém a paridade com a versão Python.
+velocidade, e é ele que faz 709 m e 387 m darem a mesma sensação de velocidade
+em tela com tempos de volta diferentes. Em 1,0 a conta é a de sempre, bit a
+bit, que é o que mantém a paridade com a versão Python.
+
+É também o botão do ritmo geral do jogo: as provas hoje correm a ~145 km/h e
+duram cerca de 50 s. Para acelerar ou desacelerar tudo, é um número por
+circuito em `Circuitos.cs`.
+
+**O que NÃO escala junto com o ritmo:** alcance dos ataques (0,12 volta), prazo
+do Escudo (2 checkpoints) e espaçamento dos sensores são medidos em PISTA e
+acompanham sozinhos. Já `BombaDuracao` e `TiroDuracao` são segundos absolutos —
+num ritmo mais lento, os mesmos segundos parados custam menos distância ao
+alvo. Os dois valores já levam essa compensação (parcial, de propósito:
+compensar inteiro daria 3,1 s de nave parada, que é punição e não jogada).
 
 #### Como o traçado é feito
 
@@ -559,8 +570,8 @@ em checkpoint nenhum. São três poderes:
 
 | Face | Efeito | Peso |
 | --- | --- | --- |
-| Tiro | Deixa o adversário lento: teto de PWM ×0,45 por 2,5 s | 34 |
-| Bomba | Para o adversário: PWM zerado por 2 s | 26 |
+| Tiro | Deixa o adversário lento: teto de PWM ×0,45 por 3 s | 34 |
+| Bomba | Para o adversário: PWM zerado por 2,4 s | 26 |
 | Escudo | Apara um ataque, e vence no 2º checkpoint (3D) / no próximo ataque (2D) | 22 |
 | Nada | A caixa veio vazia | 18 |
 
@@ -672,7 +683,8 @@ A 3D deixou de ser um porte fiel da 2D. O que mudou, e o que continua colado:
 | Traçado | Elipse modulada, 232 m | Quatro circuitos, 317 a 709 m |
 | Checkpoints | 3 | 3, 4 ou 6, conforme a pista |
 | Escudo | Fica até aparar um ataque | Cai no 2º checkpoint depois de levantado |
-| Ritmo | fixo (134 km/h) | por circuito (182 a 225 km/h) |
+| Ritmo | fixo (134 km/h) | por circuito (126 a 150 km/h) |
+| Duração dos ataques | Tiro 2,5 s, Bomba 2 s | Tiro 3 s, Bomba 2,4 s |
 | Voltas para vencer | 5 | 3 ou 5, conforme a pista |
 | Fim de corrida | emenda outra | volta ao menu |
 | Acelerador, calor, PWM | **idênticos** | **idênticos** |

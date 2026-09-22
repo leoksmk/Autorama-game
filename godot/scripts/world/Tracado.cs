@@ -23,7 +23,9 @@ namespace OrbitalDerby.Mundo;
 
 public static class Tracado
 {
-    public const float AlturaVoo = 0.62f;      // a nave flutua acima do leito
+    // A nave flutua acima do leito. Acompanha o tamanho dela: com a nave menor
+    // e a altura antiga, as duas pareciam penduradas em vez de rasantes.
+    public const float AlturaVoo = 0.45f;
 
     private static Circuito _circuito = Circuitos.Icaro;
 
