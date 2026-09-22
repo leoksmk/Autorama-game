@@ -6,9 +6,15 @@ existe em duas versões:
 - **3D — Godot 4 / C#** (`godot/`). A versão para o PC da pista: cena 3D
   inteira gerada em código e controles ESP32 ligados pela USB.
 - **2D — Python / pygame** (raiz do repositório). Roda no navegador e é a
-  referência das regras: o núcleo C# da versão 3D é conferido contra ela.
-  No desktop também aceita os controles ESP32 (`python main.py`); no navegador
-  não há porta COM, então lá é sempre teclado.
+  referência da FÍSICA: o núcleo C# da 3D é conferido número a número contra
+  ela (`tests/`). No desktop também aceita os controles ESP32
+  (`python main.py`); no navegador não há porta COM, então lá é sempre teclado.
+
+> **As duas não são mais idênticas.** A 3D ganhou traçado próprio (circuito
+> ANEL DE ÍCARO, 388 m, 4 checkpoints) e Escudo com prazo em checkpoints; a 2D
+> segue com a órbita elíptica, 3 checkpoints e Escudo sem prazo. O que continua
+> igual — e é o que os testes de paridade travam — é a física do acelerador:
+> cadência, calor, PWM e velocidade. Ver "Onde as duas versões divergem".
 
 **Versão 2D no navegador: <https://leoksmk.github.io/Autorama-game/>** — a
 exportação web do Godot não suporta C#, então o link continua sendo a 2D.
@@ -90,6 +96,43 @@ cima) e **perseguição** (atrás do líder).
 | alta | névoa volumétrica, reflexos (SSR), oclusão (SSAO), sombra do sol em 4 cascatas (8192), MSAA 4x, pedras com sombra |
 | média | sem névoa volumétrica, 2 cascatas (4096), MSAA 2x, pedras sem sombra |
 | baixa | também sem SSR e SSAO, sem MSAA, luz da estação sem sombra |
+
+### O circuito
+
+A 3D não corre mais numa elipse. O leito é o **ANEL DE ÍCARO**: 388 m de volta,
+gerados por uma B-spline cúbica fechada sobre 23 pontos de controle em
+`scripts/world/Tracado.cs`. Cinco trechos, na ordem de percurso:
+
+| Trecho | t | O que é |
+| --- | --- | --- |
+| Reta principal | 0,00 – 0,13 | Largada no meio dela, subindo de leve |
+| **O S** | 0,16 – 0,34 | Esquerda rápida, direita mais fechada, em descida de 9 m |
+| Curvão do leste | 0,35 – 0,50 | Esquerda longa, raio mínimo 16 m, o ponto mais baixo |
+| Reta oposta | 0,52 – 0,62 | No fundo do vale |
+| Subida do zênite | 0,63 – 0,98 | Uma esquerda só, fechando no ápice |
+
+No talo a nave faz **223 km/h** — a velocidade subiu junto com a pista porque
+`Cap` é medido em VOLTAS por segundo, não em metros: a volta continua levando
+6,25 s, só que agora são 388 m em vez de 232. Para desacelerar sem mexer na
+forma, o botão é `Cfg.Cap` (e o `CAP` equivalente na 2D, com
+`python tests/gerar_referencia.py` depois, senão a paridade quebra).
+
+Duas decisões de geometria que não são enfeite:
+
+- **B-spline, não Catmull-Rom.** A inclinação lateral do leito é calculada a
+  partir da curvatura. Catmull-Rom é contínua só na primeira derivada, então a
+  curvatura salta em cada ponto de controle e a pista ganharia dobras de
+  inclinação visíveis. A B-spline cúbica uniforme é C² e a inclinação sai lisa.
+- **`t` reparametrizado por comprimento de arco.** `t = 0,25` é um quarto da
+  volta em METROS, não um quarto do parâmetro da spline. Sem isso a nave
+  aceleraria e frearia sozinha onde os pontos de controle são mais densos, e os
+  checkpoints deixariam de corresponder a distâncias fixas — que é justamente o
+  que os sensores da pista física vão medir.
+
+A inclinação chega a **41°** nas curvas fechadas e cai a zero nas retas. As
+zebras só aparecem acima de 45% da inclinação máxima: como três quartos desta
+volta é curva, um limiar baixo faria a zebra virar moldura da pista inteira e
+deixar de marcar coisa alguma.
 
 ### O visual
 
@@ -443,9 +486,10 @@ calor sobe, e cheio corta o motor por 1,6 s. Ritmo abaixo disso é sustentável 
 corrida inteira. É a mesma decisão de sempre — modular em vez de cravar — só
 que agora o polegar paga por ela.
 
-**A caixa de item tem hora.** Ao cruzar um dos três checkpoints com o slot
-vazio, a caixa aparece na tela e fica aberta por **0,8 s**, e o portal do
-checkpoint acende na cor da nave. Não apertou nesse tempo, a chance passa.
+**A caixa de item tem hora.** Ao cruzar um checkpoint com o slot vazio (são
+três na 2D, quatro na 3D) a caixa aparece na tela e fica aberta por **0,8 s**,
+e o portal do checkpoint acende na cor da nave. Não apertou nesse tempo, a
+chance passa.
 
 **O giro não para a nave.** Apertar a ação não interrompe nada: a caixa cicla
 por 1,5 s enquanto o carrinho continua andando, e o jogador segue martelando o
@@ -462,7 +506,7 @@ em checkpoint nenhum. São três poderes:
 | --- | --- | --- |
 | Tiro | Deixa o adversário lento: teto de PWM ×0,45 por 2,5 s | 34 |
 | Bomba | Para o adversário: PWM zerado por 2 s | 26 |
-| Escudo | Bloqueia o próximo ataque recebido | 22 |
+| Escudo | Apara um ataque, e vence no 2º checkpoint (3D) / no próximo ataque (2D) | 22 |
 | Nada | A caixa veio vazia | 18 |
 
 **Tiro e bomba só pegam de perto** — menos de 0,12 volta, medido pelo caminho
@@ -474,6 +518,20 @@ entrega.
 projétil alcança o alvo (0,38 s e 0,55 s), não no disparo — então dá para
 levantar o Escudo com a bomba já no ar. O impacto e o bloqueio acontecem sobre
 a pista, na nave: explosão, tremor e um marcador curto em cima dela.
+
+**O Escudo tem prazo, e o prazo é de pista (só na 3D).** Ele não espera o
+ataque chegar: cai sozinho quando a nave cruza o **segundo checkpoint** depois
+de levantado. Na prática são de 1,3 s a 3,3 s de proteção, dependendo de onde
+no trecho o jogador apertou — sempre um trecho completo entre sensores, no
+mínimo. O escudo passa a ser uma leitura ("o rival está colado, levanto agora")
+em vez de um seguro guardado no bolso a corrida inteira.
+
+Por que em checkpoints e não em segundos: **é o único relógio que o autorama
+físico já tem**. Um temporizador exigiria um cronômetro paralelo ao da pista;
+"cai no próximo sensor" é o evento que o hardware gera de graça, e é a mesma
+coisa que o jogador vê pela janela. O aviso é triplo e redundante de propósito:
+a bolha da nave pisca em âmbar no último trecho, as pastilhas do painel apagam
+uma a uma, e a telemetria escreve `escudo (1 trecho)`.
 
 **A ÍRIS-9 é só cenário por enquanto.** Na versão 2D a varredura está desligada
 em `IRIS_EVENTO_ATIVO = False` (o maquinário continua em `station.py`); na 3D a
@@ -550,16 +608,43 @@ drivers/
 
 ---
 
+## Onde as duas versões divergem
+
+A 3D deixou de ser um porte fiel da 2D. O que mudou, e o que continua colado:
+
+| | 2D (pygame) | 3D (Godot) |
+| --- | --- | --- |
+| Traçado | Elipse modulada, 232 m | ANEL DE ÍCARO, 388 m, com o S |
+| Checkpoints | 3 | 4 |
+| Escudo | Fica até aparar um ataque | Cai no 2º checkpoint depois de levantado |
+| Velocidade no talo | 134 km/h | 223 km/h |
+| Acelerador, calor, PWM | **idênticos** | **idênticos** |
+
+A última linha é a que importa e é a que os testes travam: nenhuma dessas
+mudanças toca em `Cap`, `Accel`, `Decel`, `CalorSubida`, `PwmBase` ou na
+máquina de cadência de cliques. A 2D continua sendo a referência da física.
+
+Voltar a 3D ao comportamento antigo do Escudo é uma linha: `Cfg.EscudoTrechos`
+alto o bastante para nunca vencer dentro de uma corrida.
+
+---
+
 ## Testes
 
 ```bash
 dotnet test tests/OrbitalDerby.Core.Tests
 ```
 
-São 61 testes do núcleo C#: acelerador, roleta, poderes, corrida, protocolo
-serial. `ReferenciaPythonTests` roda cenários fixos nas duas implementações e
-compara com o JSON gerado pela versão Python (`python tests/gerar_referencia.py`),
-com tolerância de 1e-9 — se a regra mudar de um lado só, o teste acusa.
+São 69 testes do núcleo C#: acelerador, roleta, poderes, escudo, corrida,
+protocolo serial. `ReferenciaPythonTests` roda cenários fixos nas duas
+implementações e compara com o JSON gerado pela versão Python
+(`python tests/gerar_referencia.py`), com tolerância de 1e-9 — se a física
+mudar de um lado só, o teste acusa.
+
+`EscudoTests` cobre o prazo do Escudo pelos dois caminhos que existem: a
+integração e `SincronizarPosicao`, que é por onde o sensor físico vai entrar.
+Um dos testes é de balanceamento e não de código — ele falha se o menor trecho
+entre checkpoints ficar curto demais para dar tempo de reagir a uma bomba.
 
 ---
 
@@ -620,6 +705,7 @@ PascalCase.
 | --- | --- |
 | `CHECKPOINTS` | Posição normalizada de cada sensor na volta. **Medir na pista.** |
 | `ROLETA_OPORTUNIDADE` | Quantos segundos a roleta fica aberta após a passagem |
+| `EscudoTrechos` (3D) | Quantas passagens por sensor o Escudo aguenta. Depende do ESPAÇAMENTO dos checkpoints: com sensores mais juntos, subir. |
 | `SOMBRA_INICIO` / `SOMBRA_FIM` | Trecho da zona de sombra. Só importa se `IRIS_EVENTO_ATIVO` voltar; aí **medir na pista** e marcar fisicamente. |
 | `COMPRIMENTO_VOLTA_M` | Comprimento real da volta (só telemetria) |
 | `PWM_BASE` | Duty que corresponde ao teto base de velocidade |
@@ -639,6 +725,10 @@ PascalCase.
   garantido.
 - `TIRO_VOO` / `BOMBA_VOO` — tempo de voo dos ataques. Aumentar dá mais janela
   para o adversário reagir com o Escudo; é balanceamento, não animação.
+- `EscudoTrechos` (só 3D) — quantas passagens por sensor o Escudo aguenta.
+  Baixar para 1 deixa a proteção com duração imprevisível (em média meio
+  trecho, ~0,7 s), porque o jogador levanta o escudo sempre no meio de um
+  trecho; subir aproxima do comportamento antigo, de escudo sem prazo.
 - `TIRO_ALCANCE` / `BOMBA_ALCANCE` — o quanto o alvo pode estar longe e ainda
   ser acertado, em voltas. Aumentar torna os ataques quase automáticos.
 - `CADENCIA_PLENA_HZ` — quantos cliques por segundo dão PWM cheio.
@@ -646,8 +736,10 @@ PascalCase.
 - `CLIQUE_TIMEOUT`, `CLIQUE_INTERVALO_MIN` — quando o motor corta por falta de
   apertos, e o teto anti-repique.
 
-Mudou uma regra? Mude nas duas versões e rode `python tests/gerar_referencia.py`
-seguido de `dotnet test` — o teste de referência existe para pegar a divergência.
+Mudou a FÍSICA (`CAP`, `ACCEL`, `DECEL`, calor, cadência)? Mude nas duas
+versões e rode `python tests/gerar_referencia.py` seguido de `dotnet test` — o
+teste de referência existe para pegar a divergência. Traçado, checkpoints e
+prazo do Escudo já divergem de propósito; ver "Onde as duas versões divergem".
 
 ---
 

@@ -298,6 +298,14 @@ public partial class Efeitos3D : Node3D, IEfeitos
         Marcar(nave.Lane, "escudo", ciano, 1.0);
     }
 
+    /// <summary>
+    /// O escudo venceu no sensor. A bolha some sozinha (NaveVisual segue
+    /// nave.Escudo); aqui só fica o aviso, discreto de propósito: quem perdeu
+    /// o escudo precisa saber, mas não é um evento de impacto.
+    /// </summary>
+    public void EscudoVenceu(Nave nave) =>
+        Marcar(nave.Lane, "escudo caiu", Paleta.DoItem(Item.Escudo).Lerp(Paleta.TextoFraco, 0.45f), 1.0);
+
     public void Superaquecimento(Nave nave)
     {
         Vector3 pos = PontoDaNave(nave.Lane);

@@ -56,6 +56,7 @@ public interface IEfeitos
     void Ataque(Nave origem, Nave alvo, Item tipo, bool errou);
     void Impacto(Nave alvo, Item tipo, ResultadoAtaque resultado);
     void EscudoLevantado(Nave nave);
+    void EscudoVenceu(Nave nave);
     void Superaquecimento(Nave nave);
 }
 
@@ -68,6 +69,7 @@ public sealed class SemEfeitos : IEfeitos
     public void Ataque(Nave origem, Nave alvo, Item tipo, bool errou) { }
     public void Impacto(Nave alvo, Item tipo, ResultadoAtaque resultado) { }
     public void EscudoLevantado(Nave nave) { }
+    public void EscudoVenceu(Nave nave) { }
     public void Superaquecimento(Nave nave) { }
 }
 
@@ -190,7 +192,14 @@ public sealed class Corrida
             if (nave.Superaquecimento > 0.0 && overAntes <= 0.0)
                 Fx.Superaquecimento(nave);
 
-            // Passou por um sensor com o slot vazio: a janela da caixa abre.
+            // Passou por um sensor: a mesma passagem abre a caixa e gasta um
+            // trecho do Escudo. Os dois são consumidos aqui, no frame do evento.
+            if (nave.EscudoVenceu)
+            {
+                Fx.EscudoVenceu(nave);
+                Anotar($"Escudo de {nave.Nome} caiu no checkpoint", Tom.Fraco);
+            }
+
             if (correndo
                 && nave.CheckpointCruzado.HasValue
                 && nave.Slot is null
@@ -350,6 +359,7 @@ public sealed class Corrida
         }
         else if (item == Item.Escudo)
         {
+            // Rearma pelo prazo cheio, mesmo se já houvesse um escudo de pé.
             nave.Escudo = true;
             nave.Mensagem("Escudo ativo");
             Anotar($"{nave.Nome} levantou Escudo", TomDe(nave));

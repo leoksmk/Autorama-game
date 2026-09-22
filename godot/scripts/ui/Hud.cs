@@ -10,6 +10,10 @@ using System.Linq;
 using Godot;
 using OrbitalDerby.Core;
 using OrbitalDerby.Entrada;
+// O minimapa e o velocímetro precisam do traçado: um para desenhar a volta,
+// outro para saber quantos metros vale uma volta. É a única dependência do HUD
+// no mundo 3D, e é de leitura — nada daqui volta para a geometria.
+using OrbitalDerby.Mundo;
 
 namespace OrbitalDerby.Interface;
 
@@ -33,7 +37,7 @@ public partial class Hud : Control
         public double Duracao, Idade;
     }
 
-    private enum Vidro { P1, P2, Caixa1, Caixa2, Telemetria, Cartao }
+    private enum Vidro { P1, P2, Caixa1, Caixa2, Telemetria, Cartao, Mapa }
 
     public Font Fonte { get; private set; } = null!;
     public Font FonteForte { get; private set; } = null!;
@@ -49,9 +53,16 @@ public partial class Hud : Control
     private readonly float[] _desvio = new float[2];
     private readonly float[] _livre = { 1f, 1f };
     public AncoraNave[] Ancoras { get; set; } = new AncoraNave[2];
-    private readonly Panel[] _vidros = new Panel[6];
+    private readonly Panel[] _vidros = new Panel[7];
     private StyleBoxFlat _borda = null!;
     private StyleBoxFlat _preenche = null!;
+
+    // Traçado do minimapa em coordenadas 0..1, medido uma vez do Tracado.
+    private Vector2[]? _mapaLinha;
+    private float _mapaLargura;        // largura do leito, na escala do mapa
+    private Vector2[] _mapaCp = Array.Empty<Vector2>();
+    private Vector2[] _mapaCpNormal = Array.Empty<Vector2>();
+    private Vector2 _mapaLargada, _mapaLargadaNormal;
 
     private EstadoApp _estado;
     private double _contagem, _t;
@@ -168,15 +179,23 @@ public partial class Hud : Control
                 && RectCaixa(lane).GrowIndividual(24f, 12f, 24f, 96f).Intersects(r))
                 return true;
         }
-        return RectTelemetria().Intersects(r);
+        return RectTelemetria().Intersects(r)
+            || (_estado != EstadoApp.Atracao && RectMapa().Grow(12f).Intersects(r));
     }
 
     // -- geometria da tela ---------------------------------------------------------
 
     private Rect2 RectPainel(int lane)
     {
-        const float w = 390f, h = 268f;
+        const float w = 404f, h = 316f;
         return lane == 0 ? new Rect2(28f, 28f, w, h) : new Rect2(Tela.X - 28f - w, 28f, w, h);
+    }
+
+    /// <summary>Minimapa: canto de baixo à esquerda, logo acima da telemetria.</summary>
+    private Rect2 RectMapa()
+    {
+        const float w = 340f, h = 262f;
+        return new Rect2(28f, Tela.Y - 92f - 20f - h, w, h);
     }
 
     private Rect2 RectCaixa(int lane)
@@ -199,7 +218,7 @@ public partial class Hud : Control
 
     private Rect2 RectCartaoAtracao()
     {
-        const float w = 1000f, h = 540f;
+        const float w = 1000f, h = 572f;
         return new Rect2((Tela.X - w) / 2f, Tela.Y * 0.56f - h / 2f, w, h);
     }
 
@@ -218,6 +237,7 @@ public partial class Hud : Control
             Mostrar(lane == 0 ? Vidro.Caixa1 : Vidro.Caixa2,
                     _estado == EstadoApp.Corrida && _corrida!.Naves[lane].Roleta.Visivel, RectCaixa(lane));
         Mostrar(Vidro.Telemetria, true, RectTelemetria());
+        Mostrar(Vidro.Mapa, jogo, RectMapa());
         Mostrar(Vidro.Cartao, _estado is EstadoApp.Atracao or EstadoApp.Resultado,
                 _estado == EstadoApp.Atracao ? RectCartaoAtracao() : RectCartaoResultado());
     }
@@ -327,6 +347,7 @@ public partial class Hud : Control
                 CaixaItem(c, lane);
             }
             Relogio(c);
+            Minimapa(c);
         }
         Telemetria(c);
 
@@ -346,6 +367,12 @@ public partial class Hud : Control
             TextoDir(c, $"{Engine.GetFramesPerSecond():0} fps", Tela.X - 24f, 22f, 16, Fraco);
     }
 
+    /// <summary>
+    /// Painel de uma nave. A hierarquia é deliberada: primeiro quem é e em que
+    /// posição está, depois a VELOCIDADE — o número que o jogador olha de canto
+    /// de olho enquanto martela —, e só então ritmo e calor, que ele consulta
+    /// de vez em quando em vez de monitorar.
+    /// </summary>
     private void PainelJogador(CanvasItem c, int lane)
     {
         var r = RectPainel(lane);
@@ -355,26 +382,40 @@ public partial class Hud : Control
 
         float x = r.Position.X + 22f, y = r.Position.Y, dir = r.End.X - 22f, larg = r.Size.X - 44f;
 
-        Texto(c, n.Nome, new Vector2(x, y + 50f), 36, cor, true);
-        int voltas = Math.Min(n.Voltas, Cfg.VoltasParaVencer);
-        TextoDir(c, $"{voltas}/{Cfg.VoltasParaVencer}", dir, y + 58f, 54, Paleta.Texto, true);
-
+        // Faixa de identidade: nome à esquerda, posição à direita, fio embaixo.
         int pos = _corrida.Posicao(n);
-        Texto(c, "ritmo", new Vector2(x, y + 88f), 18, Fraco);
-        TextoDir(c, $"{pos}º", dir, y + 88f, 20, pos == 1 ? Paleta.Texto : Fraco, true);
-        Barra(c, new Rect2(x, y + 96f, larg, 12f), (float)n.Esforco, n.Esforco > 0.05 ? cor : new Color(0.2f, 0.25f, 0.35f));
-        float lx = x + larg * (float)Cfg.CalorLimiar;          // daqui para cima o motor esquenta
-        c.DrawLine(new Vector2(lx, y + 92f), new Vector2(lx, y + 112f), Fraco, 1.5f);
+        Texto(c, n.Nome, new Vector2(x, y + 44f), 34, cor, true);
+        TextoDir(c, $"{pos}º", dir, y + 44f, 34, pos == 1 ? Paleta.Texto : Fraco, true);
+        c.DrawLine(new Vector2(x, y + 76f), new Vector2(dir, y + 76f), new Color(cor, 0.35f), 1.5f);
 
-        Texto(c, "calor", new Vector2(x, y + 132f), 18, Fraco);
+        // Velocímetro. Em km/h porque a volta passou a ter comprimento de
+        // verdade: Speed é em voltas por segundo e uma volta são
+        // Tracado.Comprimento metros — nada de escala inventada.
+        float kmh = (float)n.Speed * Tracado.Comprimento * 3.6f;
+        string num = $"{kmh:0}";
+        Texto(c, num, new Vector2(x, y + 140f), 64, n.Speed > 0.005 ? Paleta.Texto : Fraco, true);
+        Texto(c, "km/h", new Vector2(x + Largura(num, 64, true) + 10f, y + 138f), 22, Fraco);
+
+        // Voltas e diferença para o rival, do outro lado do velocímetro.
+        int voltas = Math.Min(n.Voltas, Cfg.VoltasParaVencer);
+        TextoDir(c, $"{voltas}/{Cfg.VoltasParaVencer}", dir, y + 112f, 40, Paleta.Texto, true);
+        var (txtDif, corDif) = Diferenca(n);
+        TextoDir(c, txtDif, dir, y + 140f, 24, corDif, true);
+
+        Texto(c, "ritmo", new Vector2(x, y + 172f), 17, Fraco);
+        Barra(c, new Rect2(x, y + 180f, larg, 12f), (float)n.Esforco, n.Esforco > 0.05 ? cor : new Color(0.2f, 0.25f, 0.35f));
+        float lx = x + larg * (float)Cfg.CalorLimiar;          // daqui para cima o motor esquenta
+        c.DrawLine(new Vector2(lx, y + 176f), new Vector2(lx, y + 196f), Fraco, 1.5f);
+
+        Texto(c, "calor", new Vector2(x, y + 216f), 17, Fraco);
         Color corCalor = n.Superaquecimento > 0 ? Paleta.Alerta : Paleta.Ok.Lerp(Paleta.Alerta, (float)n.Calor);
-        var rc = new Rect2(x, y + 140f, larg, 14f);
+        var rc = new Rect2(x, y + 224f, larg, 14f);
         Barra(c, rc, (float)n.Calor, corCalor);
         if (n.Calor > 0.78 && n.Superaquecimento <= 0 && Math.Sin(_t * 14) > 0)
             c.DrawRect(rc, Paleta.Alerta, false, 2f);
 
-        Texto(c, "slot", new Vector2(x, y + 184f), 18, Fraco);
-        var rs = new Rect2(x + 54f, y + 164f, larg - 54f, 30f);
+        Texto(c, "slot", new Vector2(x, y + 268f), 17, Fraco);
+        var rs = new Rect2(x + 52f, y + 248f, larg - 52f, 30f);
         c.DrawRect(rs, new Color(0.05f, 0.08f, 0.14f, 0.85f));
         if (n.Slot is Item item)
         {
@@ -398,13 +439,55 @@ public partial class Hud : Control
         {
             Texto(c, "vazio", rs.Position + new Vector2(12f, 22f), 20, Fraco);
         }
+        EscudoRestante(c, n, new Vector2(rs.End.X - 12f, rs.GetCenter().Y));
 
         var fonte = _fontes[lane];
-        c.DrawCircle(new Vector2(x + 5f, y + 217f), 5f, fonte.Pronta ? Paleta.Ok : Paleta.Alerta);
-        Texto(c, fonte.Descricao, new Vector2(x + 17f, y + 223f), 16, Fraco);
+        c.DrawCircle(new Vector2(x + 5f, y + 294f), 5f, fonte.Pronta ? Paleta.Ok : Paleta.Alerta);
+        Texto(c, fonte.Descricao, new Vector2(x + 17f, y + 300f), 16, Fraco);
 
         if (!string.IsNullOrEmpty(n.Aviso))
-            Texto(c, n.Aviso, new Vector2(x, y + 254f), 20, cor, true);
+            Texto(c, n.Aviso, new Vector2(x, y + 332f), 20, cor, true);
+    }
+
+    /// <summary>
+    /// Diferença para o rival, em segundos de pista. Convertida pelo ritmo de
+    /// quem vai na frente: "0,2 volta atrás" não diz nada, "1,4 s atrás" diz.
+    /// </summary>
+    private (string, Color) Diferenca(Nave n)
+    {
+        var outro = _corrida!.Adversario(n);
+        double d = n.Progresso - outro.Progresso;
+        if (Math.Abs(d) < 2e-4)
+            return ("lado a lado", Fraco);
+        // Nunca dividir pela velocidade instantânea crua: com a nave parada por
+        // uma bomba a diferença explodiria para minutos e o painel pareceria
+        // quebrado justo no momento em que o jogador mais olha para ele.
+        double ritmo = Math.Max(Cfg.Cap * 0.5, Math.Max(n.Speed, outro.Speed));
+        double seg = Math.Abs(d) / ritmo;
+        string txt = (d > 0 ? "+" : "-") + $"{seg:0.0} s";
+        return (txt, d > 0 ? Paleta.Ok : Paleta.Alerta);
+    }
+
+    /// <summary>
+    /// Quanto sobra do Escudo, em trechos entre checkpoints. Pastilhas e não
+    /// barra: o que resta é contável e inteiro, e uma barra sugeriria um
+    /// relógio escorrendo — que é exatamente o que o Escudo deixou de ser.
+    /// </summary>
+    private void EscudoRestante(CanvasItem c, Nave n, Vector2 direita)
+    {
+        if (n.EscudoTrechos <= 0) return;
+        Color ci = Paleta.DoItem(Item.Escudo);
+        if (n.EscudoNoUltimoTrecho)
+            ci = ci.Lerp(Paleta.Alerta, 0.35f + 0.35f * MathF.Sin((float)_t * 13f));
+        const float raio = 5f, passo = 15f;
+        for (int k = 0; k < Cfg.EscudoTrechos; k++)
+        {
+            var p = new Vector2(direita.X - k * passo, direita.Y);
+            if (k < n.EscudoTrechos)
+                c.DrawCircle(p, raio, ci);
+            else
+                c.DrawArc(p, raio, 0f, Mathf.Tau, 16, new Color(ci, 0.4f), 1.5f, true);
+        }
     }
 
     private void CaixaItem(CanvasItem c, int lane)
@@ -455,6 +538,123 @@ public partial class Hud : Control
         }
     }
 
+    // -- minimapa -----------------------------------------------------------------------
+
+    /// <summary>
+    /// Mede o traçado uma vez e guarda tudo em coordenadas 0..1, para o desenho
+    /// só precisar de uma multiplicação por quadro. A projeção é de cima: X do
+    /// mundo vira X da tela, Z vira Y, e a altura some — mapa de circuito é
+    /// planta baixa, não perspectiva.
+    /// </summary>
+    private void PrepararMapa()
+    {
+        if (_mapaLinha is not null) return;
+
+        const int n = 300;
+        var bruto = new Vector2[n + 1];
+        float minX = float.MaxValue, maxX = float.MinValue;
+        float minY = float.MaxValue, maxY = float.MinValue;
+        for (int i = 0; i <= n; i++)
+        {
+            var o = Tracado.Centro((double)i / n);
+            bruto[i] = new Vector2(o.X, o.Z);
+            minX = MathF.Min(minX, o.X); maxX = MathF.Max(maxX, o.X);
+            minY = MathF.Min(minY, o.Z); maxY = MathF.Max(maxY, o.Z);
+        }
+
+        // Escala única nos dois eixos: circuito espremido num eixo deixa de ser
+        // reconhecível, e reconhecer a forma é a única coisa que o mapa faz.
+        float esc = 1f / MathF.Max(maxX - minX, maxY - minY);
+        var centroCaixa = new Vector2((minX + maxX) / 2f, (minY + maxY) / 2f);
+        Vector2 Normalizar(Vector2 v) => (v - centroCaixa) * esc + new Vector2(0.5f, 0.5f);
+
+        _mapaLinha = new Vector2[n + 1];
+        for (int i = 0; i <= n; i++)
+            _mapaLinha[i] = Normalizar(bruto[i]);
+        _mapaLargura = Tracado.Largura * esc;
+
+        _mapaCp = new Vector2[Cfg.Checkpoints.Length];
+        _mapaCpNormal = new Vector2[Cfg.Checkpoints.Length];
+        for (int i = 0; i < Cfg.Checkpoints.Length; i++)
+            (_mapaCp[i], _mapaCpNormal[i]) = PontoENormal(Cfg.Checkpoints[i], Normalizar);
+        (_mapaLargada, _mapaLargadaNormal) = PontoENormal(0.0, Normalizar);
+    }
+
+    private static (Vector2, Vector2) PontoENormal(double t, Func<Vector2, Vector2> normalizar)
+    {
+        var a = Tracado.Centro(t - 0.002);
+        var b = Tracado.Centro(t + 0.002);
+        var pa = normalizar(new Vector2(a.X, a.Z));
+        var pb = normalizar(new Vector2(b.X, b.Z));
+        var dir = (pb - pa).Normalized();
+        return (normalizar(new Vector2(Tracado.Centro(t).X, Tracado.Centro(t).Z)), new Vector2(-dir.Y, dir.X));
+    }
+
+    /// <summary>Onde t cai dentro do retângulo do mapa.</summary>
+    private static Vector2 NoMapa(Vector2 normalizado, Rect2 r) =>
+        r.Position + new Vector2(normalizado.X * r.Size.X, normalizado.Y * r.Size.Y);
+
+    /// <summary>
+    /// Planta do circuito com as duas naves em cima. Com o traçado antigo — um
+    /// oval — um mapa não valeria o pixel; com o S, o curvão e a subida, saber
+    /// em que parte da volta o rival está muda a hora de usar o item.
+    /// </summary>
+    private void Minimapa(CanvasItem c)
+    {
+        PrepararMapa();
+        var caixa = RectMapa();
+        Borda(c, caixa, Neutra);
+        Texto(c, "circuito", caixa.Position + new Vector2(18f, 28f), 16, Fraco);
+        TextoDir(c, $"{Tracado.Comprimento:0} m", caixa.End.X - 18f, 12f + caixa.Position.Y, 16, Fraco);
+
+        // Área útil: sobra margem em cima para o rótulo e em volta para as naves
+        // não encostarem na borda de vidro.
+        var r = new Rect2(caixa.Position + new Vector2(30f, 44f), caixa.Size - new Vector2(60f, 74f));
+        float lado = MathF.Min(r.Size.X, r.Size.Y);
+        r = new Rect2(r.Position + (r.Size - new Vector2(lado, lado)) / 2f, new Vector2(lado, lado));
+
+        var pontos = new Vector2[_mapaLinha!.Length];
+        for (int i = 0; i < pontos.Length; i++)
+            pontos[i] = NoMapa(_mapaLinha[i], r);
+
+        // O leito é uma polilinha grossa, e não um anel de polígonos: uma chamada
+        // de desenho em vez de trezentas, e a espessura já sai na escala certa.
+        float grossura = MathF.Max(5f, _mapaLargura * lado);
+        c.DrawPolyline(pontos, new Color(0.10f, 0.14f, 0.22f, 0.95f), grossura, true);
+        c.DrawPolyline(pontos, new Color(0.35f, 0.47f, 0.68f, 0.55f), 1.5f, true);
+
+        // Checkpoints: tracinho atravessado, aceso na cor de quem tem a caixa
+        // aberta ali — a mesma regra do portal na pista, para o mapa e o mundo
+        // nunca contarem histórias diferentes.
+        for (int i = 0; i < _mapaCp.Length; i++)
+        {
+            var dono = _corrida!.Naves.FirstOrDefault(n =>
+                n.Roleta.Estado == EstadoRoleta.Oportunidade && n.Roleta.Checkpoint == i);
+            Color cor = dono is null ? new Color(0.45f, 0.58f, 0.8f, 0.8f) : Paleta.DoJogador(dono.Lane);
+            float esp = dono is null ? 2f : 3.5f;
+            var p = NoMapa(_mapaCp[i], r);
+            var d = _mapaCpNormal[i] * (grossura * 0.75f);
+            c.DrawLine(p - d, p + d, cor, esp, true);
+        }
+
+        var pl = NoMapa(_mapaLargada, r);
+        var dl = _mapaLargadaNormal * (grossura * 0.9f);
+        c.DrawLine(pl - dl, pl + dl, Paleta.Texto, 3f, true);
+
+        // As naves por cima de tudo. O líder ganha um anel: numa planta pequena
+        // a diferença de cor sozinha não diz quem está na frente.
+        foreach (var n in _corrida!.Naves)
+        {
+            var p = NoMapa(_mapaLinha[Mathf.PosMod((int)MathF.Round((float)(n.T * (_mapaLinha.Length - 1))), _mapaLinha.Length - 1)], r);
+            Color cor = Paleta.DoJogador(n.Lane);
+            if (_corrida.Posicao(n) == 1)
+                c.DrawArc(p, 9f, 0f, Mathf.Tau, 20, new Color(cor, 0.55f), 2f, true);
+            c.DrawCircle(p, 5.5f, cor);
+            if (n.Escudo)
+                c.DrawArc(p, 7.5f, 0f, Mathf.Tau, 18, Paleta.DoItem(Item.Escudo), 1.5f, true);
+        }
+    }
+
     private void Relogio(CanvasItem c)
     {
         TextoCentro(c, Tempo(_corrida!.Tempo), Tela.X / 2f, 64f, 44, Paleta.Texto, true);
@@ -482,7 +682,9 @@ public partial class Hud : Control
         string[] alertas = { "superaquecido", "parado pela bomba", "teto reduzido" };
         for (int lane = 0; lane < 2; lane++)
         {
-            float bx = 24f + lane * 520f, by = y + 64f;
+            // 560 e não 520: o rótulo de efeito mais longo ("teto reduzido +
+            // escudo (1 trecho)") encostava no bloco da pista 2.
+            float bx = 24f + lane * 560f, by = y + 64f;
             Color cor = Paleta.DoJogador(lane);
             float pwm = (float)_saida.Pwm(lane);
             string tag = string.IsNullOrEmpty(_saida.Tag(lane)) ? "livre" : _saida.Tag(lane);
@@ -506,6 +708,8 @@ public partial class Hud : Control
         float topo = Tela.Y * 0.2f;
         TextoCentro(c, "ORBITAL DERBY", cx, topo, 108, Paleta.Texto, true);
         TextoCentro(c, "Dois cargueiros, um anel de detritos e a ÍRIS-9 vigiando.", cx, topo + 48f, 24, Fraco);
+        TextoCentro(c, $"circuito ANEL DE ÍCARO  ·  {Tracado.Comprimento:0} m  ·  {Cfg.Checkpoints.Length} checkpoints",
+                    cx, topo + 76f, 20, Paleta.Estacao.Lerp(Paleta.Texto, 0.7f));
 
         var r = RectCartaoAtracao();
         Borda(c, r, Neutra);
@@ -527,7 +731,8 @@ public partial class Hud : Control
             "Ritmo alto demais esquenta o motor, e calor cheio corta por 1,6 s.",
             $"Cruzar um checkpoint abre a caixa por {Cfg.RoletaOportunidade:0.0} s — aperte AÇÃO para girar.",
             "A caixa gira sem parar a nave, mas às vezes vem vazia.",
-            "Tiro deixa lento, Bomba para por 2 s, Escudo bloqueia um ataque.",
+            "Tiro deixa lento, Bomba para por 2 s, Escudo apara um ataque.",
+            "O Escudo NÃO espera: ele cai no segundo checkpoint depois de levantado.",
             "Tiro e Bomba só pegam o adversário de perto. Longe, o item queima.",
             $"Vence quem completar {Cfg.VoltasParaVencer} voltas.",
         };

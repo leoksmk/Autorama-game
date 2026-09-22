@@ -64,7 +64,22 @@ public static class Cfg
     // Checkpoints e caixa de item
     // ------------------------------------------------------------------
     // ATENÇÃO: remedir contra a posição física dos sensores.
-    public static readonly double[] Checkpoints = { 0.12, 0.45, 0.78 };
+    //
+    // Os quatro caem em marcos do traçado, não em frações redondas: entrada do
+    // S, saída do curvão, fim da reta oposta e ápice da subida. Como o t é
+    // reparametrizado por comprimento (Mundo.Tracado), cada valor aqui é uma
+    // distância fixa em metros desde a largada — que é o que o sensor mede.
+    //
+    // Nenhum deles cai em trecho inclinado, e isso é requisito, não sorte: o
+    // pórtico do checkpoint é construído no quadro local do leito, então um
+    // checkpoint no meio de uma curva de 40° daria um portal tombado 40°. O
+    // CP2 nasceu em 0,38, no curvão, e foi para 0,35 — a saída do S — por isso.
+    //
+    //   CP1 -> CP2   81 m   1,31 s no talo
+    //   CP2 -> CP3   97 m   1,56 s
+    //   CP3 -> CP4   89 m   1,44 s
+    //   CP4 -> CP1  120 m   1,94 s
+    public static readonly double[] Checkpoints = { 0.14, 0.35, 0.60, 0.83 };
 
     // A janela é de TEMPO, não de posição: cruzar o checkpoint abre a caixa e
     // ela fica aberta por RoletaOportunidade. Casa com o sensor físico, que
@@ -76,9 +91,9 @@ public static class Cfg
     // ------------------------------------------------------------------
     // Itens
     // ------------------------------------------------------------------
-    // Tiro derruba o teto de PWM, Bomba zera o PWM, Escudo cancela o próximo
-    // ataque. "Nada" é o único risco da caixa — como girar não custa mais
-    // velocidade, é o que impede que apertar em todo checkpoint seja de graça.
+    // Tiro derruba o teto de PWM, Bomba zera o PWM, Escudo cancela um ataque
+    // enquanto durar. "Nada" é o único risco da caixa — como girar não custa
+    // mais velocidade, é o que impede que apertar em todo checkpoint seja de graça.
     public static readonly (Item Item, double Peso)[] ItemPesos =
     {
         (Item.Tiro, 34),
@@ -100,6 +115,20 @@ public static class Cfg
     public const double TiroMult = 0.45;             // teto de PWM do alvo
     public const double TiroDuracao = 2.5;
 
+    // O Escudo não dura para sempre: ele cai numa PASSAGEM POR SENSOR, como
+    // tudo mais que é temporal neste jogo. EscudoTrechos é quantas passagens
+    // ele aguenta — 2, e não 1, por uma razão de aritmética:
+    //
+    // quem levanta o escudo está sempre NO MEIO de um trecho, então gastar a
+    // primeira passagem deixaria uma proteção de duração imprevisível, em
+    // média meio trecho (~0,7 s) — menos que o voo de uma bomba mais o tempo
+    // de reação, ou seja, um item que não dá para usar. Com 2, o escudo cobre
+    // o resto do trecho onde foi levantado MAIS o trecho seguinte inteiro:
+    // de 1,3 s (levantou colado num sensor) a 3,3 s (levantou logo depois de
+    // passar por um). Ele morre num checkpoint, que é a regra pedida, e sempre
+    // vale pelo menos um trecho completo.
+    public const int EscudoTrechos = 2;
+
     // Catch-up: quem está atrás sorteia mais ataque e menos caixa vazia.
     public const bool CatchupAtivo = true;
     public const double CatchupBias = 0.55;
@@ -118,7 +147,7 @@ public static class Cfg
     {
         Item.Tiro => "deixa o adversário lento",
         Item.Bomba => "para o adversário por 2 s",
-        Item.Escudo => "bloqueia o próximo ataque",
+        Item.Escudo => "bloqueia um ataque até o próximo checkpoint",
         _ => "a caixa veio vazia",
     };
 }

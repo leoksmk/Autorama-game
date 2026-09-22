@@ -47,11 +47,34 @@ public sealed class Nave
 
     public double Lento;        // teto x TiroMult (levou um tiro)
     public double Atordoado;    // PWM zerado (levou uma bomba)
-    public bool Escudo;         // bloqueia o próximo ataque
+
+    /// <summary>
+    /// Quantas passagens por sensor o Escudo ainda aguenta. Zero é sem escudo.
+    ///
+    /// O escudo é o único efeito deste jogo que NÃO é contado em segundos, e
+    /// isso é de propósito: um temporizador não tem como existir no autorama
+    /// físico sem um relógio paralelo ao da pista, enquanto "cai no próximo
+    /// sensor" é exatamente o tipo de evento que o hardware já gera. Também é
+    /// o que o jogador lê na pista, sem olhar para o HUD.
+    /// </summary>
+    public int EscudoTrechos;
+
+    /// <summary>Atalho: o escudo está de pé? Escrever true rearma pelo prazo cheio.</summary>
+    public bool Escudo
+    {
+        get => EscudoTrechos > 0;
+        set => EscudoTrechos = value ? Cfg.EscudoTrechos : 0;
+    }
+
+    /// <summary>Último trecho antes de cair. Só a interface usa, para avisar.</summary>
+    public bool EscudoNoUltimoTrecho => EscudoTrechos == 1;
 
     // Passagem por sensor, válida só no frame em que acontece. Consumida pela
     // Corrida. Os sensores físicos preencherão este mesmo campo.
     public int? CheckpointCruzado;
+
+    /// <summary>O escudo caiu de velho neste frame (não foi gasto num ataque).</summary>
+    public bool EscudoVenceu;
 
     // Feedback para a interface (não afeta a simulação).
     public string Aviso = "";
@@ -95,7 +118,7 @@ public sealed class Nave
         if (Atordoado > 0.0) return "parado pela bomba";
         var partes = new List<string>(2);
         if (Lento > 0.0) partes.Add("teto reduzido");
-        if (Escudo) partes.Add("escudo");
+        if (Escudo) partes.Add(EscudoTrechos == 1 ? "escudo (1 trecho)" : "escudo");
         return partes.Count > 0 ? string.Join(" + ", partes) : "livre";
     }
 
@@ -107,7 +130,7 @@ public sealed class Nave
     {
         if (Escudo)
         {
-            Escudo = false;
+            EscudoTrechos = 0;
             Mensagem("Escudo bloqueou");
             Flash = 0.30;
             return ResultadoAtaque.Bloqueado;
@@ -141,8 +164,23 @@ public sealed class Nave
             Voltas++;
         int? cruzou = Pista.CruzouCheckpoint(anterior, novo);
         if (cruzou.HasValue)
-            CheckpointCruzado = cruzou;
+            RegistrarPassagem(cruzou.Value);
         T = novo;
+    }
+
+    /// <summary>
+    /// Passou por um sensor. Ponto único: a integração e o sensor físico
+    /// chegam aqui pelo mesmo caminho, então o que vence com a passagem — hoje
+    /// o Escudo — vence igual nos dois, sem regra duplicada.
+    /// </summary>
+    private void RegistrarPassagem(int checkpoint)
+    {
+        CheckpointCruzado = checkpoint;
+        if (EscudoTrechos > 0 && --EscudoTrechos == 0)
+        {
+            EscudoVenceu = true;
+            Mensagem("Escudo caiu", 1.2);
+        }
     }
 
     /// <summary>
@@ -151,8 +189,9 @@ public sealed class Nave
     /// </summary>
     public void Atualizar(double dt, bool clique, bool correndo)
     {
-        // 0. o evento de sensor vale um frame só
+        // 0. os eventos de sensor valem um frame só
         CheckpointCruzado = null;
+        EscudoVenceu = false;
 
         // 1. temporizadores
         Lento = Math.Max(0.0, Lento - dt);
@@ -251,7 +290,7 @@ public sealed class Nave
             T = Pista.Mod1(T + Speed * dt);
             int? cruzou = Pista.CruzouCheckpoint(anterior, T);
             if (cruzou.HasValue)
-                CheckpointCruzado = cruzou;
+                RegistrarPassagem(cruzou.Value);
             if (anterior > 0.9 && T < 0.1)
                 Voltas++;
         }

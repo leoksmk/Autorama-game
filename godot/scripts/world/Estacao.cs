@@ -15,7 +15,11 @@ namespace OrbitalDerby.Mundo;
 
 public partial class Estacao : Node3D
 {
-    public const float Raio = 10f;
+    // O circuito novo tem 130 m de ponta a ponta e a ÍRIS-9 fica no meio dele:
+    // no raio antigo ela sumia no vazio do infield. Os detalhes (balizas, aro da
+    // íris) continuam em tamanho absoluto, então a estação maior também ganha
+    // densidade de detalhe em vez de virar a mesma bola esticada.
+    public const float Raio = 16f;
     private const float AnguloAbertura = 21f;   // graus, medidos a partir do polo da íris
     private const int Laminas = 9;
 
@@ -31,7 +35,7 @@ public partial class Estacao : Node3D
 
     public override void _Ready()
     {
-        Position = new Vector3(0f, 3.5f, 0f);
+        Position = new Vector3(2f, 7f, -2f);   // no centro geométrico do traçado, não na origem
         RotationDegrees = new Vector3(24f, 0f, 0f);   // íris inclinada para o lado da câmera
         _corpo = new Node3D();
         AddChild(_corpo);
@@ -250,7 +254,7 @@ public partial class Estacao : Node3D
         {
             LightColor = new Color(0.66f, 0.5f, 1f),
             LightEnergy = 5f,
-            OmniRange = 60f,
+            OmniRange = 95f,
             ShadowEnabled = true,
             LightVolumetricFogEnergy = 4f,
             Position = new Vector3(0f, yNucleo + rb * 0.9f, 0f),

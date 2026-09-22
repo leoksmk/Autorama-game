@@ -54,7 +54,7 @@ public partial class Ambiente : Node3D
             VolumetricFogDensity = 0.0028f,
             VolumetricFogAlbedo = new Color(0.55f, 0.55f, 0.7f),
             VolumetricFogAnisotropy = 0.55f,
-            VolumetricFogLength = 140f,
+            VolumetricFogLength = 240f,
 
             AdjustmentEnabled = true,
             AdjustmentContrast = 1.08f,
@@ -74,7 +74,7 @@ public partial class Ambiente : Node3D
             LightAngularDistance = 0.6f,         // sombra de borda macia
             ShadowEnabled = true,
             DirectionalShadowMode = DirectionalLight3D.ShadowMode.Parallel4Splits,
-            DirectionalShadowMaxDistance = 220f,
+            DirectionalShadowMaxDistance = 380f,   // a volta agora tem 388 m
             LightVolumetricFogEnergy = 0.12f,    // quem ilumina a névoa é a íris, não o sol
         };
         AddChild(Sol);

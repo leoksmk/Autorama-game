@@ -18,9 +18,11 @@ public sealed class ConstrutorMalha
     private readonly List<Vector3> _v = new();
     private readonly List<Vector3> _n = new();
     private readonly List<Vector2> _uv = new();
+    private readonly List<Vector2> _uv2 = new();
     private readonly List<Color> _c = new();
     private readonly List<int> _i = new();
     private bool _temCor;
+    private bool _temUv2;
 
     public int Contagem => _v.Count;
     public Vector3 NormalDoVertice(int i) => _n[i];
@@ -35,13 +37,21 @@ public sealed class ConstrutorMalha
             _v[k] += delta;
     }
 
-    public int V(Vector3 p, Vector3 n, Vector2 uv = default, Color? cor = null)
+    /// <summary>
+    /// Novo vértice. <paramref name="uv2"/> é o canal para dados por vértice que
+    /// não são textura — a inclinação do leito, por exemplo. Vai em UV2 e não em
+    /// COLOR de propósito: UV2 chega ao shader como foi escrito, enquanto a cor
+    /// de vértice passa por conversão de espaço de cor conforme o modo da malha.
+    /// </summary>
+    public int V(Vector3 p, Vector3 n, Vector2 uv = default, Color? cor = null, Vector2? uv2 = null)
     {
         _v.Add(p);
         _n.Add(n);
         _uv.Add(uv);
+        _uv2.Add(uv2 ?? Vector2.Zero);
         _c.Add(cor ?? Colors.White);
         _temCor |= cor.HasValue;
+        _temUv2 |= uv2.HasValue;
         return _v.Count - 1;
     }
 
@@ -108,6 +118,8 @@ public sealed class ConstrutorMalha
         arr[(int)Mesh.ArrayType.Vertex] = _v.ToArray();
         arr[(int)Mesh.ArrayType.Normal] = _n.ToArray();
         arr[(int)Mesh.ArrayType.TexUV] = _uv.ToArray();
+        if (_temUv2)
+            arr[(int)Mesh.ArrayType.TexUV2] = _uv2.ToArray();
         if (_temCor)
             arr[(int)Mesh.ArrayType.Color] = _c.ToArray();
         arr[(int)Mesh.ArrayType.Index] = _i.ToArray();

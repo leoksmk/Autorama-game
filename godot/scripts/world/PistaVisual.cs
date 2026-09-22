@@ -11,7 +11,9 @@ namespace OrbitalDerby.Mundo;
 
 public partial class PistaVisual : Node3D
 {
-    private const int Segmentos = 1400;
+    // ~5,7 anéis por metro nos 388 m da volta. As curvas do S têm 16 m de raio;
+    // com a metade disso os polígonos do leito apareciam de dentro do cockpit.
+    private const int Segmentos = 2200;
     private const float Espessura = 0.35f;
 
     private readonly StandardMaterial3D[] _matPortal = new StandardMaterial3D[Cfg.Checkpoints.Length];
@@ -83,7 +85,7 @@ public partial class PistaVisual : Node3D
     {
         float w = Tracado.Largura;
         float comp = Tracado.Comprimento;
-        const int colunas = 5;
+        const int colunas = 7;
         var m = new ConstrutorMalha();
         var topo = new int[Segmentos + 1, colunas];
         var esq = new int[Segmentos + 1, 2];
@@ -96,18 +98,30 @@ public partial class PistaVisual : Node3D
             var q = Tracado.Quadro(t);
             float s = i == Segmentos ? comp : Tracado.Distancia(t);   // fecha a volta sem emenda
             Vector3 x = q.Basis.X, y = q.Basis.Y;
+
+            // UV.x cresce SEMPRE de dentro para fora do circuito. Sem esta
+            // correção, o lado do leito que UV.x = 0 aponta viraria conforme a
+            // volta gira, e o shader pintaria a faixa do ÍON em cima da do
+            // ÍGNIS em metade da pista.
+            float sentido = Tracado.Fora(q).Dot(x) >= 0f ? 1f : -1f;
+            // Inclinação normalizada: é ela que acende as zebras e o desgaste.
+            var dados = new Vector2(Tracado.Inclinacao(t) / Tracado.InclinacaoMax, 0f);
+
             for (int c = 0; c < colunas; c++)
             {
-                float u = (float)c / (colunas - 1);
-                topo[i, c] = m.V(q.Origin + x * ((u - 0.5f) * w), y, new Vector2(u, s));
+                float lateral = ((float)c / (colunas - 1) - 0.5f) * w;
+                float u = 0.5f + sentido * lateral / w;
+                topo[i, c] = m.V(q.Origin + x * lateral, y, new Vector2(u, s), uv2: dados);
             }
+
+            float ue = 0.5f - sentido * 0.5f, ud = 0.5f + sentido * 0.5f;
             Vector3 be = q.Origin - x * (w * 0.5f), bd = q.Origin + x * (w * 0.5f);
-            esq[i, 0] = m.V(be, -x, new Vector2(0f, s));
-            esq[i, 1] = m.V(be - y * Espessura, -x, new Vector2(0f, s));
-            dir[i, 0] = m.V(bd, x, new Vector2(1f, s));
-            dir[i, 1] = m.V(bd - y * Espessura, x, new Vector2(1f, s));
-            baixo[i, 0] = m.V(be - y * Espessura, -y, new Vector2(0f, s));
-            baixo[i, 1] = m.V(bd - y * Espessura, -y, new Vector2(1f, s));
+            esq[i, 0] = m.V(be, -x, new Vector2(ue, s), uv2: dados);
+            esq[i, 1] = m.V(be - y * Espessura, -x, new Vector2(ue, s), uv2: dados);
+            dir[i, 0] = m.V(bd, x, new Vector2(ud, s), uv2: dados);
+            dir[i, 1] = m.V(bd - y * Espessura, x, new Vector2(ud, s), uv2: dados);
+            baixo[i, 0] = m.V(be - y * Espessura, -y, new Vector2(ue, s), uv2: dados);
+            baixo[i, 1] = m.V(bd - y * Espessura, -y, new Vector2(ud, s), uv2: dados);
         }
 
         for (int i = 0; i < Segmentos; i++)
@@ -123,6 +137,12 @@ public partial class PistaVisual : Node3D
         var mat = new ShaderMaterial { Shader = GD.Load<Shader>("res://shaders/pista.gdshader") };
         mat.SetShaderParameter("comprimento", comp);
         mat.SetShaderParameter("largura", w);
+        // Onde fica o eixo de cada faixa, em UV.x. Vem daqui e não de um número
+        // no shader: se o leito ou o afastamento das faixas mudar, o desgaste
+        // continua em cima do lugar por onde a nave passa de verdade.
+        mat.SetShaderParameter("faixa_u", Tracado.OffsetFaixa / w);
+        mat.SetShaderParameter("cor_pista1", Paleta.Ion);
+        mat.SetShaderParameter("cor_pista2", Paleta.Ignis);
         AddChild(new MeshInstance3D { Mesh = m.Construir(), MaterialOverride = mat });
     }
 
@@ -182,9 +202,9 @@ public partial class PistaVisual : Node3D
     {
         // Espinha tubular correndo por baixo do leito.
         var caminho = new List<Vector3>();
-        for (int i = 0; i < 360; i++)
+        for (int i = 0; i < 600; i++)
         {
-            var q = Tracado.Quadro(i / 360.0);
+            var q = Tracado.Quadro(i / 600.0);
             caminho.Add(q.Origin - q.Basis.Y * 1.15f);
         }
         var espinha = new ConstrutorMalha();

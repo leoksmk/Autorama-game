@@ -38,8 +38,8 @@ public partial class CameraRig : Node3D
             Attributes = new CameraAttributesPractical
             {
                 DofBlurFarEnabled = true,
-                DofBlurFarDistance = 150f,
-                DofBlurFarTransition = 80f,
+                DofBlurFarDistance = 230f,
+                DofBlurFarTransition = 110f,
                 DofBlurAmount = 0.06f,
             },
         };
@@ -69,24 +69,27 @@ public partial class CameraRig : Node3D
 
         if (Cinematica)
         {
-            float a = t * 0.07f + 0.6f;
-            posAlvo = new Vector3(MathF.Cos(a) * 64f, 17f + 5f * MathF.Sin(t * 0.13f), MathF.Sin(a) * 52f);
-            olharAlvo = new Vector3(0f, 2f, 0f);
+            float a = t * 0.06f + 0.6f;
+            posAlvo = new Vector3(2f + MathF.Cos(a) * 116f, 26f + 8f * MathF.Sin(t * 0.13f), -2f + MathF.Sin(a) * 98f);
+            olharAlvo = new Vector3(2f, 2f, -2f);
             fov = 46f;
         }
         else if (ModoAtual == Modo.VisaoGeral)
         {
-            posAlvo = new Vector3(0f, 92f, 44f);
-            olharAlvo = new Vector3(0f, 0f, 3f);
+            // Enquadra os 130 x 94 m do circuito inteiro com folga nas bordas.
+            posAlvo = new Vector3(4f, 124f, 56f);
+            olharAlvo = new Vector3(4f, 0f, -4f);
             fov = 44f;
         }
         else if (ModoAtual == Modo.Perseguicao)
         {
             var nave = naves[lider];
             var b = nave.GlobalTransform.Basis;
-            posAlvo = nave.GlobalPosition + b.Z * 7.5f + b.Y * 2.8f;
-            olharAlvo = nave.GlobalPosition - b.Z * 5f + b.Y * 0.6f;
-            fov = 62f;
+            posAlvo = nave.GlobalPosition + b.Z * 10f + b.Y * 3.4f;
+            olharAlvo = nave.GlobalPosition - b.Z * 7f + b.Y * 0.8f;
+            // O campo abre com o empuxo: a 220 km/h a periferia correndo é o
+            // que dá sensação de velocidade, e é de graça — nenhum efeito de tela.
+            fov = 60f + 13f * nave.Empuxo;
             rapidez = 6f;
         }
         else
@@ -100,9 +103,9 @@ public partial class CameraRig : Node3D
             radial = radial.LengthSquared() > 1f ? radial.Normalized() : Vector3.Back;
             var frente = -naves[lider].GlobalTransform.Basis.Z;
             frente = new Vector3(frente.X, 0f, frente.Z).Normalized();
-            float d = Mathf.Clamp(18f + sep * 0.55f, 18f, 72f);
-            posAlvo = foco + radial * d + Vector3.Up * (6f + d * 0.42f) - frente * (d * 0.3f);
-            olharAlvo = foco + frente * 3f;
+            float d = Mathf.Clamp(26f + sep * 0.5f, 26f, 104f);
+            posAlvo = foco + radial * d + Vector3.Up * (8f + d * 0.4f) - frente * (d * 0.3f);
+            olharAlvo = foco + frente * 4f;
             fov = 44f;
             rapidez = 3f;
         }

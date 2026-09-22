@@ -36,6 +36,7 @@ public sealed class EfeitosCompostos : IEfeitos
     public void Ataque(Nave o, Nave a, Item t, bool e) { foreach (var p in _partes) p.Ataque(o, a, t, e); }
     public void Impacto(Nave a, Item t, ResultadoAtaque r) { foreach (var p in _partes) p.Impacto(a, t, r); }
     public void EscudoLevantado(Nave n) { foreach (var p in _partes) p.EscudoLevantado(n); }
+    public void EscudoVenceu(Nave n) { foreach (var p in _partes) p.EscudoVenceu(n); }
     public void Superaquecimento(Nave n) { foreach (var p in _partes) p.Superaquecimento(n); }
 }
 
@@ -65,6 +66,7 @@ public partial class Som : Node, IEfeitos
     private readonly AudioStreamWav[] _tiroImpacto = new AudioStreamWav[2];
     private readonly AudioStreamWav[] _escudoLigado = new AudioStreamWav[2];
     private readonly AudioStreamWav[] _escudoBloqueou = new AudioStreamWav[2];
+    private readonly AudioStreamWav[] _escudoCaiu = new AudioStreamWav[2];
     private readonly AudioStreamWav[] _errou = new AudioStreamWav[2];
     private readonly AudioStreamWav[] _caixaAbriu = new AudioStreamWav[2];
     private readonly AudioStreamWav[] _tique = new AudioStreamWav[2];
@@ -144,6 +146,7 @@ public partial class Som : Node, IEfeitos
             _tiroImpacto[lane] = Banco.TiroImpacto(tom).ParaWav(pan);
             _escudoLigado[lane] = Banco.EscudoLigado(tom).ParaWav(pan);
             _escudoBloqueou[lane] = Banco.EscudoBloqueou(tom).ParaWav(pan);
+            _escudoCaiu[lane] = Banco.EscudoCaiu(tom).ParaWav(pan);
             _errou[lane] = Banco.AtaqueErrou(tom).ParaWav(pan);
             _caixaAbriu[lane] = Banco.CaixaAbriu(tom).ParaWav(pan);
             _tique[lane] = Banco.RoletaTique(tom).ParaWav(pan);
@@ -248,6 +251,8 @@ public partial class Som : Node, IEfeitos
     }
 
     public void EscudoLevantado(Nave nave) => Tocar(_escudoLigado[nave.Lane], -1f);
+
+    public void EscudoVenceu(Nave nave) => Tocar(_escudoCaiu[nave.Lane], -7f);
 
     public void Superaquecimento(Nave nave) => Tocar(_superaqueceu[nave.Lane], 1f);
 

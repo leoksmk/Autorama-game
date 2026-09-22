@@ -34,6 +34,7 @@ public static class Exportar
             fila.Add(($"{p}_04_tiro_impacto", Banco.TiroImpacto(tom), pan));
             fila.Add(($"{p}_05_escudo_ligado", Banco.EscudoLigado(tom), pan));
             fila.Add(($"{p}_06_escudo_bloqueou", Banco.EscudoBloqueou(tom), pan));
+            fila.Add(($"{p}_06b_escudo_caiu", Banco.EscudoCaiu(tom), pan));
             fila.Add(($"{p}_07_errou", Banco.AtaqueErrou(tom), pan));
             fila.Add(($"{p}_08_caixa_abriu", Banco.CaixaAbriu(tom), pan));
             fila.Add(($"{p}_09_roleta_tique", Banco.RoletaTique(tom), pan));

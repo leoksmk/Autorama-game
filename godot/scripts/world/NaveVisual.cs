@@ -30,7 +30,7 @@ public partial class NaveVisual : Node3D
     private Vector3 _escalaEscudo;
     private readonly List<(StandardMaterial3D mat, float fase, bool estrobo)> _luzesNav = new();
 
-    private float _pwmSuave, _arfagem, _escudoVisivel, _impactoEscudo;
+    private float _pwmSuave, _arfagem, _escudoVisivel, _impactoEscudo, _avisoEscudo;
     private double _t;
 
     public NaveVisual() { }
@@ -354,6 +354,13 @@ public partial class NaveVisual : Node3D
     /// <summary>O bloqueio acende a bolha inteira por um instante.</summary>
     public void AcenderEscudo() => _impactoEscudo = 1f;
 
+    /// <summary>
+    /// PWM já suavizado, 0 a 1. A câmera de perseguição usa isto para abrir o
+    /// campo com a velocidade — é a mesma fonte que acende o motor, então o
+    /// quadro e o escapamento nunca discordam.
+    /// </summary>
+    public float Empuxo => _pwmSuave / (float)Cfg.PwmBase;
+
     public void Sincronizar(Nave nave, double dt)
     {
         _t += dt;
@@ -392,14 +399,19 @@ public partial class NaveVisual : Node3D
         _matBocal.EmissionEnergyMultiplier = 1f + _pwmSuave * 3.5f + (quente ? 4f : 0f);
         _fumaca.Emitting = quente || nave.Lento > 0;
 
-        // Escudo: forma com um leve estufar, e acende no bloqueio.
+        // Escudo: forma com um leve estufar, e acende no bloqueio. No último
+        // trecho antes de cair ele entra em aviso — quem está sendo caçado
+        // precisa saber que a proteção acaba no próximo portal, e olhar para
+        // a própria nave é mais rápido do que olhar para o painel.
         _escudoVisivel = Mathf.MoveToward(_escudoVisivel, nave.Escudo ? 1f : 0f, f * 3f);
         _impactoEscudo = Mathf.MoveToward(_impactoEscudo, 0f, f * 2.2f);
+        _avisoEscudo = Mathf.MoveToward(_avisoEscudo, nave.EscudoNoUltimoTrecho ? 1f : 0f, f * 4f);
         _escudo.Visible = _escudoVisivel > 0.01f || _impactoEscudo > 0.01f;
         float estufa = 0.8f + 0.2f * _escudoVisivel + 0.12f * _impactoEscudo;
         _escudo.Scale = _escalaEscudo * estufa;
         _matEscudo.SetShaderParameter("forca", _escudoVisivel);
         _matEscudo.SetShaderParameter("impacto", _impactoEscudo);
+        _matEscudo.SetShaderParameter("aviso", _avisoEscudo);
 
         foreach (var (mat, fase, estrobo) in _luzesNav)
         {

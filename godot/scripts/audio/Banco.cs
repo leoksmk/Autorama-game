@@ -131,6 +131,25 @@ public static class Banco
     }
 
     /// <summary>
+    /// Escudo vencendo no checkpoint. É o EscudoLigado ao contrário e de
+    /// costas: a varredura desce em vez de subir, sem a quinta e sem o brilho,
+    /// e o ar escapa no fim. Baixo de propósito — o jogador precisa notar que
+    /// perdeu a proteção, não levar um susto no meio de uma ultrapassagem.
+    /// </summary>
+    public static Onda EscudoCaiu(double tom = 1.0)
+    {
+        const double dur = 0.62;
+        var desce = Onda.Seno(dur, t => Varre(620 * tom, 155 * tom, t / 0.34))
+            .Env(p => Math.Min(1.0, p * 9.0) * Math.Pow(1.0 - p, 1.8));
+        var ar = Onda.Ruido(dur, 53)
+            .Bp(p => Varre(2400, 420, p), q: 1.4)
+            .Env(p => Math.Pow(1.0 - p, 2.4) * 0.8);
+        return Onda.Mixar(dur, (desce, 1.0), (ar, 0.5))
+            .Espaco(0.45, 0.2)
+            .Normalizar(0.4);
+    }
+
+    /// <summary>
     /// Escudo aparando um ataque. Ruído curto passando por um eco afinado em
     /// 520 Hz: o mesmo princípio de uma corda pinçada, que aqui soa como chapa
     /// de metal batida.
