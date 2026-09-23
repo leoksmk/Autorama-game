@@ -22,6 +22,7 @@ public sealed class Preferencias
     public TipoFonte[] Fontes = { TipoFonte.Teclado, TipoFonte.Teclado };
     public string Circuito = Circuitos.Icaro.Nome;
     public bool Mudo;
+    public bool Aquecimento = true;
     public PerfilMotor Motor = PerfilMotor.Propulsor;
     public Ambiente.Qualidade Qualidade = Ambiente.Qualidade.Alta;
     public CameraRig.Modo Camera = CameraRig.Modo.Transmissao;
@@ -43,6 +44,7 @@ public sealed class Preferencias
                 p.Fontes[i] = t;
         p.Circuito = cf.GetValue("jogo", "circuito", p.Circuito).AsString();
         p.Mudo = cf.GetValue("jogo", "mudo", false).AsBool();
+        p.Aquecimento = cf.GetValue("jogo", "aquecimento", true).AsBool();
         if (System.Enum.TryParse(cf.GetValue("jogo", "motor", "Propulsor").AsString(), out PerfilMotor m))
             p.Motor = m;
         if (System.Enum.TryParse(cf.GetValue("jogo", "qualidade", "Alta").AsString(), out Ambiente.Qualidade q))
@@ -59,6 +61,7 @@ public sealed class Preferencias
             cf.SetValue("jogo", $"p{i + 1}", Fontes[i].ToString());
         cf.SetValue("jogo", "circuito", Circuito);
         cf.SetValue("jogo", "mudo", Mudo);
+        cf.SetValue("jogo", "aquecimento", Aquecimento);
         cf.SetValue("jogo", "motor", Motor.ToString());
         cf.SetValue("jogo", "qualidade", Qualidade.ToString());
         cf.SetValue("jogo", "camera", Camera.ToString());

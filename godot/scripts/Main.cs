@@ -91,6 +91,7 @@ public partial class Main : Node3D
         _tipos = _prefs.Fontes;
         _perfilMotor = _prefs.Motor;
         _qualidade = _prefs.Qualidade;
+        Cfg.AquecimentoAtivo = _prefs.Aquecimento;
         Tracado.Usar(Circuitos.PorNome(_prefs.Circuito));
         LerArgumentos(OS.GetCmdlineUserArgs());
 
@@ -337,6 +338,20 @@ public partial class Main : Node3D
 
         cfg.Acrescentar(new Opcao
         {
+            Rotulo = "Aquecimento do motor",
+            Valor = () => Cfg.AquecimentoAtivo ? "ligado" : "desligado",
+            Detalhe = () => Cfg.AquecimentoAtivo
+                ? "martelar demais corta o motor"
+                : "dá para martelar no talo a prova inteira",
+            Mudar = _ =>
+            {
+                Cfg.AquecimentoAtivo = !Cfg.AquecimentoAtivo;
+                _prefs.Aquecimento = Cfg.AquecimentoAtivo;
+            },
+        });
+
+        cfg.Acrescentar(new Opcao
+        {
             Rotulo = "Voz dos motores",
             Valor = () => _som.NomeDoPerfil,
             Detalhe = () => _perfilMotor == PerfilMotor.Propulsor ? "grave e encorpada" : "aguda e seca",
@@ -376,6 +391,13 @@ public partial class Main : Node3D
                 _camera.ModoAtual = (CameraRig.Modo)i;
                 _prefs.Camera = _camera.ModoAtual;
             },
+        });
+
+        cfg.Acrescentar(new Opcao
+        {
+            Rotulo = "Como se joga",
+            Valor = () => "ver as regras",
+            Mudar = _ => cfg.AlternarRegras(),
         });
 
         cfg.Acrescentar(new Opcao
@@ -607,8 +629,11 @@ public partial class Main : Node3D
                     IniciarContagem();
                 break;
             case Key.R:
+                // Volta ao MENU, e não direto para outra contagem: é de lá que
+                // se troca pista e controle, e quem aborta uma corrida no meio
+                // geralmente aborta justamente para trocar alguma coisa.
                 if (_estado is EstadoApp.Corrida or EstadoApp.Resultado)
-                    IniciarContagem();
+                    EntrarAtracao();
                 break;
             case Key.Key1:
             case Key.Kp1:
@@ -793,7 +818,22 @@ public partial class Main : Node3D
                 (2.6, "01b_configuracoes", null),
                 (2.8, null, () => { c._hud.Config.Mover(3); }),
                 (3.0, "01c_configuracoes_som", null),
-                (3.2, null, () => c.IniciarContagem()),
+                (3.1, null, () => c._hud.Config.AlternarRegras()),
+                (3.4, "01d_regras", null),
+                // Desliga o calor pelo painel e corre assim: as capturas de
+                // corrida conferem tanto a regra quanto o painel sem a barra.
+                // Dois Mover: o primeiro só FECHA as regras (é a saída delas),
+                // o segundo é que anda uma linha. Sem isso o roteiro mexia na
+                // opção errada e a captura não conferia nada.
+                (3.5, null, () =>
+                {
+                    c._hud.Config.Mover(1);
+                    c._hud.Config.Mover(1);
+                    c._hud.Config.Mudar(1);
+                }),
+                (3.6, "01e_sem_calor", null),
+                (3.65, null, () => c._hud.Config.Fechar()),
+                (3.7, null, () => c.IniciarContagem()),
                 (4.8, "02_contagem", null),
                 (11.0, "03_corrida", null),
                 (11.1, null, () => c._camera.ModoAtual = CameraRig.Modo.Perseguicao),

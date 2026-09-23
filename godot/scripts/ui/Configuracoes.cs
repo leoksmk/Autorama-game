@@ -32,6 +32,14 @@ public sealed class Configuracoes
 
     public bool Aberta { get; private set; }
     public int Linha { get; private set; }
+
+    /// <summary>
+    /// O painel está mostrando as regras em vez da lista de opções. As regras
+    /// vivem aqui, e não na tela inicial, porque a tela inicial é o que um
+    /// desconhecido vê de longe: ali cabe o nome do jogo e como começar, mais
+    /// nada. Quem quer saber a regra abre a engrenagem.
+    /// </summary>
+    public bool MostrandoRegras { get; private set; }
     public IReadOnlyList<Opcao> Opcoes => _opcoes;
 
     /// <summary>Chamado quando algo muda, para o Main salvar e aplicar.</summary>
@@ -43,9 +51,16 @@ public sealed class Configuracoes
     {
         Aberta = true;
         Linha = 0;
+        MostrandoRegras = false;
     }
 
-    public void Fechar() => Aberta = false;
+    public void Fechar()
+    {
+        Aberta = false;
+        MostrandoRegras = false;
+    }
+
+    public void AlternarRegras() => MostrandoRegras = !MostrandoRegras;
 
     public void Alternar()
     {
@@ -56,6 +71,13 @@ public sealed class Configuracoes
     public void Mover(int passo)
     {
         if (_opcoes.Count == 0) return;
+        // Com as regras abertas, qualquer passo fecha elas e devolve a lista:
+        // é a saída óbvia para quem só tem dois botões.
+        if (MostrandoRegras)
+        {
+            MostrandoRegras = false;
+            return;
+        }
         Linha = (Linha + passo + _opcoes.Count) % _opcoes.Count;
     }
 

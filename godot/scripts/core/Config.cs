@@ -73,6 +73,16 @@ public static class Cfg
     // ------------------------------------------------------------------
     // Calor
     // ------------------------------------------------------------------
+    /// <summary>
+    /// Liga e desliga o calor do motor. Desligado, o acelerador não tem teto de
+    /// esforço sustentável: martelar no talo a corrida inteira passa a ser a
+    /// jogada certa, e o que sobra de decisão é a caixa de item.
+    ///
+    /// Existe porque numa feira quem nunca jogou superaquece nos primeiros dez
+    /// segundos e desiste. Desligado é o modo de quem está aprendendo.
+    /// </summary>
+    public static bool AquecimentoAtivo = true;
+
     public const double CalorSubida = 1.0 / 4.5;     // 0 -> 1 em 4,5 s no máximo
     public const double CalorDescida = 1.0 / 3.0;    // 1 -> 0 em 3,0 s em ritmo baixo
     // Abaixo deste esforço o motor esfria; acima, esquenta proporcionalmente.

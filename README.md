@@ -85,10 +85,17 @@ câmera · `Q` troca a qualidade · `M` muta o som · `N` troca a voz dos motore
 
 ### Configurações
 
-A **engrenagem no alto da tela inicial** abre o painel — ou `Tab`. Ali ficam
-pista, controle de cada nave, som, voz dos motores, qualidade e câmera. Setas
-escolhem e mudam, o mouse também clica (metade direita da linha avança, a
-esquerda volta), `Esc` ou `Enter` fecha.
+A tela inicial tem **uma frase**: "Espaço para começar". Tudo que é escolha, e
+as regras junto, está atrás da **engrenagem no alto** — ou `Tab`. Ali ficam
+pista, controle de cada nave, som, **aquecimento do motor**, voz dos motores,
+qualidade, câmera e "como se joga". Setas escolhem e mudam, o mouse também
+clica (metade direita da linha avança, a esquerda volta), `Esc` ou `Enter`
+fecha.
+
+**Aquecimento do motor** pode ser desligado. Desligado, o acelerador não tem
+teto de esforço sustentável: martelar no talo a prova inteira passa a ser a
+jogada certa e o que sobra de decisão é a caixa de item. Existe porque numa
+feira quem nunca jogou superaquece nos primeiros dez segundos e desiste.
 
 Com o painel aberto, **os dois botões do controle ESP navegam tudo**: acelerador
 desce de linha, ação muda o valor, e a última linha fecha. É o único jeito de
@@ -100,7 +107,9 @@ antes eram dois, escritos de lugares diferentes, e salvar uma opção arriscava
 apagar outra. Os dois antigos ainda são lidos uma vez, se o novo não existir.
 
 **Quando a corrida acaba, o jogo volta ao menu** e não emenda outra sozinho: é
-ali que o próximo jogador escolhe pista e controle.
+ali que o próximo jogador escolhe pista e controle. **`R` no meio de uma
+corrida também volta ao menu**, e não para outra contagem — quem aborta uma
+prova geralmente aborta para trocar alguma coisa.
 
 Na tela de abertura, **`1` e `2`** continuam trocando a entrada de cada nave
 entre teclado, controle ESP e CPU.
@@ -153,7 +162,9 @@ Esses números não são estimativa: saem do próprio código, com
   110×, para a nave ficar do tamanho certo em relação ao leito. **Para remedir
   contra a placa: cada 110 m de volta no jogo é 1 m de pista no tampo** — os
   365 m do jogo são 3,32 m de pista sobre a placa. Os checkpoints aqui são onde
-  os sensores vão ser parafusados.
+  os sensores vão ser parafusados. A ÍRIS-9 fica alinhada com o vão do degrau
+  mas **fora** do circuito: encaixada no vão ela ficava a 2 m do leito e, vista
+  de cima, cobria justamente a parte do traçado que é o desenho.
 
   O construtor de cantos (`Circuitos.Tampo`) **encolhe sozinho o raio que não
   cabe** no trecho reto entre dois cantos. Sem essa trava, um canto come o
@@ -728,8 +739,8 @@ alto o bastante para nunca vencer dentro de uma corrida.
 dotnet test tests/OrbitalDerby.Core.Tests
 ```
 
-São 69 testes do núcleo C#: acelerador, roleta, poderes, escudo, corrida,
-protocolo serial. `ReferenciaPythonTests` roda cenários fixos nas duas
+São 76 testes do núcleo C#: acelerador, roleta, poderes, escudo, circuito,
+corrida, protocolo serial. `ReferenciaPythonTests` roda cenários fixos nas duas
 implementações e compara com o JSON gerado pela versão Python
 (`python tests/gerar_referencia.py`), com tolerância de 1e-9 — se a física
 mudar de um lado só, o teste acusa.
@@ -810,6 +821,8 @@ PascalCase.
   balanceamento cru. O fator fica isolado em `CATCHUP_BIAS`.
 - `ACCEL`, `DECEL`, `CAP` — física do acelerador. `CAP = 0.16` dá ~6,2 s por
   volta no teto absoluto.
+- `AquecimentoAtivo` (só 3D) — liga e desliga o calor do motor inteiro. É opção
+  de menu, não constante, e o padrão é ligado.
 - `CALOR_SUBIDA` / `CALOR_DESCIDA` — a razão entre os dois define o ciclo de
   trabalho sustentável. **Se quiser corridas mais curtas, mexa aqui antes de
   mexer em `VOLTAS_PARA_VENCER`.**

@@ -201,6 +201,10 @@ public sealed class Nave
         if (AvisoTempo == 0.0)
             Aviso = "";
 
+        // Com o calor desligado, um corte que estava em curso não fica pendurado.
+        if (!Cfg.AquecimentoAtivo)
+            Superaquecimento = 0.0;
+
         bool emSuperaquecimento = Superaquecimento > 0.0;
         if (emSuperaquecimento)
             Superaquecimento = Math.Max(0.0, Superaquecimento - dt);
@@ -249,7 +253,11 @@ public sealed class Nave
         double esforco = vale ? Esforco : 0.0;
 
         // 3. calor: sobe proporcional ao esforço acima do limiar; abaixo, esfria
-        if (emSuperaquecimento)
+        if (!Cfg.AquecimentoAtivo)
+        {
+            Calor = 0.0;
+        }
+        else if (emSuperaquecimento)
         {
             Calor = Math.Max(0.0, Calor - Cfg.CalorDescida * dt);
         }

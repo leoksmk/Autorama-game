@@ -22,11 +22,12 @@ public partial class Asteroides : Node3D
         var rng = new RandomNumberGenerator { Seed = 4711 };
         var mat = new ShaderMaterial { Shader = GD.Load<Shader>("res://shaders/rocha.gdshader") };
 
+        int perFormaPerto = Mathf.Max(20, (int)(PertoPorForma * Tracado.Atual.DensidadeDePedras));
         for (int k = 0; k < 4; k++)
         {
             var forma = Rocha(k, rng);
             forma.SurfaceSetMaterial(0, mat);
-            var perto = Campo(forma, PertoPorForma, rng, perto: true);
+            var perto = Campo(forma, perFormaPerto, rng, perto: true);
             _perto.Add(perto);
             AddChild(perto);
             AddChild(Campo(forma, LongePorForma, rng, perto: false));

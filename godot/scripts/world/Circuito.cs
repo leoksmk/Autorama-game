@@ -50,6 +50,14 @@ public sealed class Circuito
     /// <summary>Raio (m) em que a curva já vale meia inclinação. Em metros, não no parâmetro.</summary>
     public float RaioDeReferencia { get; init; } = 26f;
 
+    /// <summary>
+    /// Quanto do cinturão de pedras este circuito recebe, 1 = o padrão. Existe
+    /// porque a densidade certa depende de quanto espaço vazio a pista deixa:
+    /// num traçado de miolo apertado, o mesmo número de pedras que enfeita um
+    /// circuito aberto vira entulho encostado no leito.
+    /// </summary>
+    public float DensidadeDePedras { get; init; } = 1f;
+
     /// <summary>Onde a ÍRIS-9 fica neste circuito, e de que tamanho.</summary>
     public Vector3 EstacaoPos { get; init; } = new(2f, 7f, -2f);
     public float EstacaoRaio { get; init; } = 16f;

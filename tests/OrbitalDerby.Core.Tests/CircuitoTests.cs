@@ -76,6 +76,40 @@ public class CircuitoTests
     }
 
     [Fact]
+    public void Com_o_aquecimento_desligado_o_motor_nunca_corta()
+    {
+        // Desligado, martelar no talo a prova inteira tem de ser possível: é
+        // exatamente para isso que a opção existe. Se o calor ainda subisse, o
+        // jogador veria o motor cortar sem nenhuma barra explicando por quê.
+        bool antes = Cfg.AquecimentoAtivo;
+        try
+        {
+            Cfg.AquecimentoAtivo = false;
+            var r = Apoio.Nova();
+            var n = r.Naves[0];
+            Apoio.Martelar(r, 20.0, 9.0);
+
+            Assert.Equal(0.0, n.Calor);
+            Assert.Equal(0.0, n.Superaquecimento);
+            Assert.True(n.Pwm > 0.5, $"o motor deveria estar no talo, e o PWM ficou em {n.Pwm:0.00}");
+        }
+        finally
+        {
+            Cfg.AquecimentoAtivo = antes;
+        }
+    }
+
+    [Fact]
+    public void Com_o_aquecimento_ligado_o_motor_corta()
+    {
+        // O contraponto do teste acima: sem ele, "desligado funciona" não prova
+        // nada, porque poderia estar desligado nos dois casos.
+        Assert.True(Cfg.AquecimentoAtivo, "o padrão tem de ser ligado");
+        var (cortes, _) = Apoio.ContarCortes(9.0, 20.0);
+        Assert.True(cortes > 0, "martelando a 9 Hz por 20 s o motor tinha de cortar");
+    }
+
+    [Fact]
     public void Os_checkpoints_estao_em_ordem_e_dentro_da_volta()
     {
         // CruzouCheckpoint anda para frente a partir de t anterior e devolve o

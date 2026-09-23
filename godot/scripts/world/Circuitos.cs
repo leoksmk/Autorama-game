@@ -205,9 +205,16 @@ public static class Circuitos
         OffsetFaixa = 2.0f,
         InclinacaoMax = 0f,      // placa de MDF não tem sobrelevação
         RaioDeReferencia = 26f,
-        // Fora do circuito: o meio do tampo é ocupado pelo degrau.
-        EstacaoPos = new Vector3(0f, 34f, -190f),
-        EstacaoRaio = 32f,
+        // Alinhada com o vão do degrau, mas FORA do circuito e não dentro dele.
+        // Encaixada no vão ela ficava a 2 m do leito e, vista de cima, cobria
+        // justamente a parte do traçado que é o desenho. Daqui ela sobra 12 m
+        // da pista mais próxima, aparece inteira atrás das retas de baixo e
+        // deixa a planta livre na câmera de visão geral.
+        EstacaoPos = new Vector3(-9f, 14f, 60f),
+        EstacaoRaio = 18f,
+        // Miolo apertado: com a densidade cheia as pedras viravam entulho
+        // encostado no leito e na estação.
+        DensidadeDePedras = 0.45f,
     };
 
     public static readonly Circuito[] Todos = { Icaro, PlantaBaixa, Interlagos, IcaroOriginal, Classica };

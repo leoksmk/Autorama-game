@@ -206,8 +206,8 @@ public partial class Hud : Control
 
     private Rect2 RectConfig()
     {
-        float h = 170f + Config.Opcoes.Count * 62f;
-        const float w = 940f;
+        float h = Config.MostrandoRegras ? 500f : 170f + Config.Opcoes.Count * 62f;
+        float w = Config.MostrandoRegras ? 1120f : 940f;
         return new Rect2((Tela.X - w) / 2f, (Tela.Y - h) / 2f, w, h);
     }
 
@@ -255,10 +255,15 @@ public partial class Hud : Control
 
     private Rect2 RectTelemetria() => new(0f, Tela.Y - 92f, Tela.X, 92f);
 
+    /// <summary>
+    /// A tela inicial tem UMA frase. Tudo que era escolha — controle de cada
+    /// nave, som, qualidade, câmera — foi para a engrenagem, e as regras foram
+    /// com elas: quem chega perto precisa saber como começar, e só.
+    /// </summary>
     private Rect2 RectCartaoAtracao()
     {
-        const float w = 1000f, h = 572f;
-        return new Rect2((Tela.X - w) / 2f, Tela.Y * 0.56f - h / 2f, w, h);
+        const float w = 620f, h = 132f;
+        return new Rect2((Tela.X - w) / 2f, Tela.Y * 0.60f - h / 2f, w, h);
     }
 
     private Rect2 RectCartaoResultado()
@@ -453,6 +458,13 @@ public partial class Hud : Control
         var r = RectConfig();
         TextoCentro(c, "ORBITAL DERBY", Tela.X / 2f, r.Position.Y - 108f, 76, Paleta.Texto, true);
         Borda(c, r, Neutra);
+
+        if (Config.MostrandoRegras)
+        {
+            TelaRegras(c, r);
+            return;
+        }
+
         Texto(c, "CONFIGURAÇÕES", r.Position + new Vector2(30f, 58f), 40, Paleta.Texto, true);
         TextoDir(c, "vale para a próxima corrida", r.End.X - 30f, r.Position.Y + 34f, 18, Fraco);
         c.DrawLine(r.Position + new Vector2(30f, 78f), new Vector2(r.End.X - 30f, r.Position.Y + 78f), Neutra, 1f);
@@ -533,12 +545,21 @@ public partial class Hud : Control
         float lx = x + larg * (float)Cfg.CalorLimiar;          // daqui para cima o motor esquenta
         c.DrawLine(new Vector2(lx, y + 176f), new Vector2(lx, y + 196f), Fraco, 1.5f);
 
+        // Com o calor desligado a barra fica parada em zero a prova inteira, o
+        // que lê como painel quebrado. Melhor dizer que está desligado.
         Texto(c, "calor", new Vector2(x, y + 216f), 17, Fraco);
-        Color corCalor = n.Superaquecimento > 0 ? Paleta.Alerta : Paleta.Ok.Lerp(Paleta.Alerta, (float)n.Calor);
-        var rc = new Rect2(x, y + 224f, larg, 14f);
-        Barra(c, rc, (float)n.Calor, corCalor);
-        if (n.Calor > 0.78 && n.Superaquecimento <= 0 && Math.Sin(_t * 14) > 0)
-            c.DrawRect(rc, Paleta.Alerta, false, 2f);
+        if (!Cfg.AquecimentoAtivo)
+        {
+            Texto(c, "desligado", new Vector2(x + 56f, y + 216f), 17, Fraco);
+        }
+        else
+        {
+            Color corCalor = n.Superaquecimento > 0 ? Paleta.Alerta : Paleta.Ok.Lerp(Paleta.Alerta, (float)n.Calor);
+            var rc = new Rect2(x, y + 224f, larg, 14f);
+            Barra(c, rc, (float)n.Calor, corCalor);
+            if (n.Calor > 0.78 && n.Superaquecimento <= 0 && Math.Sin(_t * 14) > 0)
+                c.DrawRect(rc, Paleta.Alerta, false, 2f);
+        }
 
         Texto(c, "slot", new Vector2(x, y + 268f), 17, Fraco);
         var rs = new Rect2(x + 52f, y + 248f, larg - 52f, 30f);
@@ -831,49 +852,55 @@ public partial class Hud : Control
     private void TelaAtracao(CanvasItem c)
     {
         float cx = Tela.X / 2f;
-        float topo = Tela.Y * 0.2f;
-        TextoCentro(c, "ORBITAL DERBY", cx, topo, 108, Paleta.Texto, true);
-        TextoCentro(c, "Dois cargueiros, um anel de detritos e a ÍRIS-9 vigiando.", cx, topo + 48f, 24, Fraco);
-        TextoCentro(c, $"circuito ANEL DE ÍCARO  ·  {Tracado.Comprimento:0} m  ·  {Cfg.Checkpoints.Length} checkpoints",
-                    cx, topo + 76f, 20, Paleta.Estacao.Lerp(Paleta.Texto, 0.7f));
+        float topo = Tela.Y * 0.26f;
+        TextoCentro(c, "ORBITAL DERBY", cx, topo, 118, Paleta.Texto, true);
+        TextoCentro(c, "Dois cargueiros, um anel de detritos e a \u00cdRIS-9 vigiando.", cx, topo + 52f, 26, Fraco);
+        TextoCentro(c, $"{Tracado.Atual.Nome}  \u00b7  {Tracado.Comprimento:0} m  \u00b7  {Cfg.VoltasParaVencer} voltas",
+                    cx, topo + 86f, 21, Paleta.Estacao.Lerp(Paleta.Texto, 0.7f));
 
         var r = RectCartaoAtracao();
         Borda(c, r, Neutra);
-        float x = r.Position.X + 40f, y = r.Position.Y + 58f;
+        TextoCentro(c, "Espa\u00e7o para come\u00e7ar", cx, r.Position.Y + 34f, 42, Pulsando(), true);
+        TextoCentro(c, "ou o bot\u00e3o de A\u00c7\u00c3O do controle", cx, r.Position.Y + 84f, 19, Fraco);
+    }
 
-        for (int lane = 0; lane < 2; lane++)
-        {
-            float colx = x + lane * (r.Size.X / 2f - 10f);
-            var fonte = _fontes[lane];
-            Texto(c, lane == 0 ? Cfg.NomeP1 : Cfg.NomeP2, new Vector2(colx, y), 36, Paleta.DoJogador(lane), true);
-            Texto(c, $"[{lane + 1}]  {ConfigControles.Nome(fonte.Tipo)}", new Vector2(colx, y + 38f), 24, Paleta.Texto, true);
-            c.DrawCircle(new Vector2(colx + 6f, y + 62f), 5f, fonte.Pronta ? Paleta.Ok : Paleta.Alerta);
-            Texto(c, fonte.Descricao, new Vector2(colx + 18f, y + 68f), 17, Fraco);
-        }
+    /// <summary>
+    /// As regras, dentro das configura\u00e7\u00f5es. Sa\u00edram da tela inicial porque ela
+    /// \u00e9 o que algu\u00e9m v\u00ea de longe, e de longe s\u00f3 cabe o nome do jogo e como
+    /// come\u00e7ar. Os n\u00fameros s\u00e3o lidos da regra, n\u00e3o digitados: com o calor
+    /// desligado ou outro circuito escolhido, o texto acompanha.
+    /// </summary>
+    private void TelaRegras(CanvasItem c, Rect2 r)
+    {
+        Texto(c, "COMO SE JOGA", r.Position + new Vector2(30f, 58f), 40, Paleta.Texto, true);
+        TextoDir(c, "qualquer seta volta", r.End.X - 30f, r.Position.Y + 34f, 18, Fraco);
+        c.DrawLine(r.Position + new Vector2(30f, 78f), new Vector2(r.End.X - 30f, r.Position.Y + 78f), Neutra, 1f);
 
-        string[] regras =
+        var linhas = new System.Collections.Generic.List<(string texto, bool forte)>
         {
-            "O acelerador é de MARTELAR: aperte rápido para ir rápido. Segurar não faz nada.",
-            "Ritmo alto demais esquenta o motor, e calor cheio corta por 1,6 s.",
-            $"Cruzar um checkpoint abre a caixa por {Cfg.RoletaOportunidade:0.0} s — aperte AÇÃO para girar.",
-            "A caixa gira sem parar a nave, mas às vezes vem vazia.",
-            "Tiro deixa lento, Bomba para por 2 s, Escudo apara um ataque.",
-            "O Escudo NÃO espera: ele cai no segundo checkpoint depois de levantado.",
-            "Tiro e Bomba só pegam o adversário de perto. Longe, o item queima.",
-            $"Vence quem completar {Cfg.VoltasParaVencer} voltas.",
+            ("O acelerador \u00e9 de MARTELAR: aperte r\u00e1pido para ir r\u00e1pido. Segurar n\u00e3o faz nada.", true),
         };
-        float ry = y + 128f;
-        foreach (var linha in regras)
+        if (Cfg.AquecimentoAtivo)
+            linhas.Add(($"Ritmo alto demais esquenta o motor, e calor cheio corta por {Cfg.SuperaquecimentoDuracao:0.0} s.", false));
+        else
+            linhas.Add(("O calor do motor est\u00e1 DESLIGADO: d\u00e1 para martelar no talo a prova inteira.", false));
+        linhas.Add(($"Cruzar um checkpoint abre a caixa por {Cfg.RoletaOportunidade:0.0} s \u2014 aperte A\u00c7\u00c3O para girar.", false));
+        linhas.Add(("A caixa gira sem parar a nave, mas \u00e0s vezes vem vazia.", false));
+        linhas.Add(($"Tiro deixa lento por {Cfg.TiroDuracao:0.0} s, Bomba para por {Cfg.BombaDuracao:0.0} s, Escudo apara um ataque.", false));
+        linhas.Add(("O Escudo N\u00c3O espera: ele cai no segundo checkpoint depois de levantado.", true));
+        linhas.Add(("Tiro e Bomba s\u00f3 pegam o advers\u00e1rio de perto. Longe, o item queima.", false));
+        linhas.Add(($"Vence quem completar {Cfg.VoltasParaVencer} voltas. O circuito de hoje é o {Tracado.Atual.Nome}, de {Tracado.Comprimento:0} m.", false));
+
+        float y = r.Position.Y + 126f;
+        foreach (var (texto, forte) in linhas)
         {
-            Texto(c, linha, new Vector2(x, ry), 21, Fraco);
-            ry += 32f;
+            Texto(c, texto, new Vector2(r.Position.X + 30f, y), 23, forte ? Paleta.Texto : Fraco, forte);
+            y += 38f;
         }
 
-        // As chamadas ficam dentro do cartão: soltas sobre a pista clara, sumiam.
-        c.DrawLine(new Vector2(r.Position.X + 40f, r.End.Y - 100f), new Vector2(r.End.X - 40f, r.End.Y - 100f), Neutra, 1f);
-        TextoCentro(c, "Espaço ou AÇÃO para começar", cx, r.End.Y - 56f, 32, Pulsando(), true);
-        TextoCentro(c, "1 e 2 trocam teclado / controle ESP / CPU   ·   C câmera   ·   Q qualidade   ·   F11 tela cheia   ·   Esc sai",
-                    cx, r.End.Y - 22f, 18, Fraco);
+        c.DrawLine(new Vector2(r.Position.X + 30f, r.End.Y - 52f), new Vector2(r.End.X - 30f, r.End.Y - 52f), Neutra, 1f);
+        TextoCentro(c, "R durante a corrida volta para este menu  \u00b7  F11 tela cheia  \u00b7  Esc sai",
+                    r.GetCenter().X, r.End.Y - 38f, 19, Fraco);
     }
 
     /// <summary>
