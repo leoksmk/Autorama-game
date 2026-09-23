@@ -40,6 +40,10 @@ public partial class Main : Node3D
     private readonly GerenteSerial _serial = new();
     private readonly IFonteEntrada[] _fontes = new IFonteEntrada[2];
     private readonly bool[] _forcarAcao = new bool[2];
+    /// <summary>Intervalo mínimo entre dois passos do painel pelos botões, em segundos.</summary>
+    private const double IntervaloDoMenu = 0.22;
+
+    private double _desdeMenu;
     private Preferencias _prefs = new();
     private TipoFonte[] _tipos = { TipoFonte.Teclado, TipoFonte.Teclado };
 
@@ -451,23 +455,9 @@ public partial class Main : Node3D
             case EstadoApp.Atracao:
                 _relogioDemo += dt;
                 if (_hud.Config.Aberta)
-                {
-                    // Os dois botões do controle ESP navegam o painel inteiro:
-                    // acelerador desce de linha, ação muda o valor. É o único
-                    // jeito de configurar numa feira, onde ninguém tem mouse
-                    // nem teclado à mão — e a última linha do painel fecha.
-                    if (p1.Acelerador || p2.Acelerador)
-                    {
-                        _hud.Config.Mover(1);
-                        _som.Interface();
-                    }
-                    if (p1.Acao || p2.Acao)
-                        _hud.Config.Mudar(1);
-                }
+                    NavegarPelosBotoes(dt, p1, p2);
                 else if (p1.Acao || p2.Acao || (_demo && _captura is null && _relogioDemo > 6))
-                {
                     IniciarContagem();
-                }
                 break;
 
             case EstadoApp.Contagem:
@@ -672,11 +662,52 @@ public partial class Main : Node3D
         }
     }
 
+    /// <summary>
+    /// Os dois botões do controle ESP navegando o painel: acelerador desce de
+    /// linha, ação muda o valor. É o único jeito de configurar numa feira, onde
+    /// ninguém tem mouse nem teclado à mão.
+    ///
+    /// Duas travas, e as duas vieram de bug:
+    ///
+    /// CPU NÃO NAVEGA. FonteCpu martela o acelerador a 9 Hz o tempo todo, sem
+    /// olhar o estado da tela — com um jogador em CPU, o seletor descia nove
+    /// linhas por segundo e não dava para escolher nada.
+    ///
+    /// E há um intervalo mínimo entre passos. Não é conforto: a linha "Pista"
+    /// reconstrói a malha do leito, os pórticos, as pedras e a estação. Sem a
+    /// trava, martelar o acelerador mandava reconstruir o mundo mais rápido do
+    /// que ele fica pronto.
+    /// </summary>
+    private void NavegarPelosBotoes(double dt, Pulso p1, Pulso p2)
+    {
+        _desdeMenu += dt;
+        if (_desdeMenu < IntervaloDoMenu)
+            return;
+
+        bool humano1 = _tipos[0] != TipoFonte.Cpu;
+        bool humano2 = _tipos[1] != TipoFonte.Cpu;
+        bool desce = (humano1 && p1.Acelerador) || (humano2 && p2.Acelerador);
+        bool muda = (humano1 && p1.Acao) || (humano2 && p2.Acao);
+
+        if (desce)
+        {
+            _desdeMenu = 0;
+            _hud.Config.Mover(1);
+            _som.Interface();
+        }
+        else if (muda)
+        {
+            _desdeMenu = 0;
+            _hud.Config.Mudar(1);
+        }
+    }
+
     private void AlternarConfiguracoes()
     {
         if (_estado is not (EstadoApp.Atracao or EstadoApp.Resultado))
             return;
         _hud.Config.Alternar();
+        _desdeMenu = 0;
         _som.Interface();
     }
 
