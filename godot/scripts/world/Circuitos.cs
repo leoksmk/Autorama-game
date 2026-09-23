@@ -160,7 +160,74 @@ public static class Circuitos
         EstacaoRaio = 13f,
     };
 
-    public static readonly Circuito[] Todos = { Icaro, Interlagos, IcaroOriginal, Classica };
+    /// <summary>
+    /// PLANTA BAIXA — o traçado do desenho técnico da pista física: 1,20 m x
+    /// 0,80 m de tampo, 3,4 m de pista, anel arredondado com a língua subindo
+    /// no meio. Aqui ele está ampliado 110x, para a nave ficar do tamanho certo
+    /// em relação ao leito.
+    ///
+    /// É a única PLANA, e plana de verdade: altura zero em todo ponto de
+    /// controle e InclinacaoMax = 0. Uma placa de MDF não tem sobrelevação nem
+    /// rampa, e a graça desta pista é ser a que vai existir de fato — os
+    /// checkpoints aqui são onde os sensores vão ser parafusados.
+    ///
+    /// Para remedir contra a placa: cada 110 m de volta no jogo é 1 m de pista
+    /// no tampo.
+    /// </summary>
+    public static readonly Circuito PlantaBaixa = new()
+    {
+        Nome = "PLANTA BAIXA",
+        Resumo = "377 m · o desenho da pista física, 1,20 × 0,80 m · plana",
+        Controle = Tampo(new[]
+        {
+            // (x, z) em METROS DO DESENHO, com x para a direita e z para baixo
+            // na planta. Sentido de percurso: para a direita na reta de cima.
+            // -- reta principal, borda de cima, rumo leste
+            (0.22f, 0.73f), (0.42f, 0.74f), (0.64f, 0.74f), (0.86f, 0.73f),
+            // -- grampo do leste: o 180° amplo, os 0,60 m do desenho
+            (1.03f, 0.69f), (1.13f, 0.57f), (1.14f, 0.40f), (1.07f, 0.23f),
+            // -- borda de baixo à direita, rumo oeste
+            (0.93f, 0.13f), (0.79f, 0.11f),
+            // -- sobe para o miolo: parede direita da mordida
+            (0.70f, 0.18f), (0.66f, 0.31f), (0.67f, 0.43f),
+            // -- língua do meio, rumo oeste
+            (0.60f, 0.50f), (0.48f, 0.50f),
+            // -- desce de volta: parede esquerda da mordida
+            (0.40f, 0.44f), (0.36f, 0.31f), (0.37f, 0.18f),
+            // -- borda de baixo à esquerda, rumo oeste
+            (0.31f, 0.11f), (0.21f, 0.09f),
+            // -- grampo do oeste, fechando a volta
+            (0.11f, 0.15f), (0.06f, 0.29f), (0.06f, 0.50f), (0.12f, 0.66f),
+        }),
+        Checkpoints = new[] { 0.08, 0.30, 0.52, 0.74 },
+        Ritmo = 0.62,
+        Largura = 9f,
+        OffsetFaixa = 2.2f,
+        InclinacaoMax = 0f,      // placa de MDF não tem sobrelevação
+        RaioDeReferencia = 26f,
+        // Fora do circuito: o meio do tampo é ocupado pela língua.
+        EstacaoPos = new Vector3(0f, 34f, -190f),
+        EstacaoRaio = 32f,
+    };
+
+    public static readonly Circuito[] Todos = { Icaro, PlantaBaixa, Interlagos, IcaroOriginal, Classica };
+
+    /// <summary>
+    /// Converte metros do DESENHO em metros do jogo: centra a placa na origem,
+    /// amplia 110x e espelha o eixo de profundidade, para a reta de cima do
+    /// desenho ficar em cima também na câmera de visão geral.
+    /// </summary>
+    private static Vector3[] Tampo((float x, float z)[] pontos)
+    {
+        const float larguraDoTampo = 1.20f, alturaDoTampo = 0.80f;
+        const float escala = 132f / larguraDoTampo;   // 132 m de circuito no jogo
+        var v = new Vector3[pontos.Length];
+        for (int i = 0; i < pontos.Length; i++)
+            v[i] = new Vector3((pontos[i].x - larguraDoTampo * 0.5f) * escala,
+                               0f,
+                               (alturaDoTampo * 0.5f - pontos[i].z) * escala);
+        return v;
+    }
 
     public static Circuito PorNome(string nome)
     {

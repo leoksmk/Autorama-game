@@ -104,8 +104,14 @@ public partial class PistaVisual : Node3D
             // volta gira, e o shader pintaria a faixa do ÍON em cima da do
             // ÍGNIS em metade da pista.
             float sentido = Tracado.Fora(q).Dot(x) >= 0f ? 1f : -1f;
-            // Inclinação normalizada: é ela que acende as zebras e o desgaste.
-            var dados = new Vector2(Tracado.Inclinacao(t) / Tracado.InclinacaoMax, 0f);
+            // Inclinação normalizada: é ela que acende as zebras e as luzes de
+            // borda. A guarda não é paranoia — a PLANTA BAIXA é plana de
+            // propósito, com InclinacaoMax = 0, e 0/0 mandaria NaN para o
+            // shader, que pinta o leito inteiro de preto.
+            float banco = Tracado.InclinacaoMax > 1e-4f
+                ? Tracado.Inclinacao(t) / Tracado.InclinacaoMax
+                : 0f;
+            var dados = new Vector2(banco, 0f);
 
             for (int c = 0; c < colunas; c++)
             {

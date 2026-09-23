@@ -78,7 +78,9 @@ public partial class CameraRig : Node3D
         Vector3 meio = caixa.Position + caixa.Size * 0.5f;
         float proporcao = MathF.Max(1f, GetViewport().GetVisibleRect().Size.Aspect());
         float meioLado = MathF.Max(caixa.Size.X * 0.5f / proporcao, caixa.Size.Z * 0.5f);
-        float alturaGeral = meioLado / MathF.Tan(Mathf.DegToRad(22f)) * 1.25f;
+        // 1,38 de folga e não 1,25: a inclinação da câmera come parte do
+        // alcance, e na PLANTA BAIXA os dois grampos encostavam nas bordas.
+        float alturaGeral = meioLado / MathF.Tan(Mathf.DegToRad(22f)) * 1.38f;
         float escala = MathF.Max(caixa.Size.X, caixa.Size.Z) / 133f;
 
         if (Cinematica)

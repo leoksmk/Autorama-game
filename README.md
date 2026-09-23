@@ -63,7 +63,7 @@ chamando o executável do Godot, elas vão depois de `--`:
 | --- | --- |
 | `--p1=` / `--p2=` | entrada da nave: `teclado`, `controle` (ou `esp`, `serial`), `cpu` |
 | `--demo` | CPU contra CPU, em loop |
-| `--pista=` | circuito: `icaro`, `interlagos`, `bruto`, `classica` |
+| `--pista=` | circuito: `icaro`, `planta`, `interlagos`, `bruto`, `classica` |
 | `--medir-pistas` | imprime a tabela medida de todos os circuitos e sai |
 | `--qualidade=` | `alta` (padrão), `media`, `baixa` |
 | `--captura=<pasta>` | roteiro fixo que salva 12 capturas de tela e fecha |
@@ -119,12 +119,13 @@ cima) e **perseguição** (atrás do líder).
 
 ### Os circuitos
 
-A 3D tem quatro pistas. A escolha é feita no menu (engrenagem no alto) ou por
+A 3D tem cinco pistas. A escolha é feita no menu (engrenagem no alto) ou por
 `--pista=`, e vale a partir da corrida seguinte.
 
 | Circuito | Volta | Em tela | Volta em | Prova | Raio mín. | Banco | Rampa |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | **ANEL DE ÍCARO** | 387 m | 145 km/h | 9,6 s | 5 voltas, ~48 s | 16,6 m | 22° | 7,6% |
+| **PLANTA BAIXA** | 377 m | 135 km/h | 10,1 s | 5 voltas, ~50 s | 11,0 m | **0°** | **0%** |
 | **INTERLAGOS ORBITAL** | 709 m | 150 km/h | 17,0 s | 3 voltas, ~51 s | 10,3 m | 25° | 9,6% |
 | **ÍCARO BRUTO** | 387 m | 145 km/h | 9,6 s | 5 voltas, ~48 s | 14,3 m | 42° | 18,6% |
 | **ÓRBITA CLÁSSICA** | 317 m | 126 km/h | 9,1 s | 5 voltas, ~46 s | 17,0 m | 16° | 9,0% |
@@ -138,6 +139,14 @@ Esses números não são estimativa: saem do próprio código, com
 - **ANEL DE ÍCARO** é o padrão: reta principal, o S no leste (esquerda rápida,
   direita fechada, em descida), curvão, reta oposta no fundo do vale e a subida
   do zênite.
+- **PLANTA BAIXA** é o traçado do desenho técnico da pista física — 1,20 m ×
+  0,80 m de tampo, anel arredondado com a língua subindo no meio. É a única
+  **plana**, e plana de verdade: altura zero em todo ponto de controle e
+  `InclinacaoMax = 0`, porque uma placa de MDF não tem sobrelevação nem rampa.
+  No jogo ela está ampliada 110×, para a nave ficar do tamanho certo em relação
+  ao leito. **Para remedir contra a placa: cada 110 m de volta no jogo é 1 m de
+  pista no tampo** — os 377 m do jogo são 3,43 m de pista sobre a placa. Os
+  checkpoints aqui são onde os sensores vão ser parafusados.
 - **INTERLAGOS ORBITAL** é a homenagem, com os marcos na mesma ordem do
   original: reta dos boxes, o S, Curva do Sol, Reta Oposta, Descida do Lago,
   Ferradura, Pinheirinho, Bico de Pato, Mergulho, Junção e Subida dos Boxes. É
