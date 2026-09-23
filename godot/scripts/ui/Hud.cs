@@ -253,7 +253,11 @@ public partial class Hud : Control
         return r;
     }
 
-    private Rect2 RectTelemetria() => new(0f, Tela.Y - 92f, Tela.X, 92f);
+    /// <summary>
+    /// O rodapé de empuxo. Baixo porque agora mostra uma coisa só, e ausente na
+    /// tela inicial: lá não há nave alguma mandando corrente para pista nenhuma.
+    /// </summary>
+    private Rect2 RectTelemetria() => new(0f, Tela.Y - 62f, Tela.X, 62f);
 
     /// <summary>
     /// A tela inicial tem UMA frase. Tudo que era escolha — controle de cada
@@ -280,7 +284,7 @@ public partial class Hud : Control
         for (int lane = 0; lane < 2; lane++)
             Mostrar(lane == 0 ? Vidro.Caixa1 : Vidro.Caixa2,
                     _estado == EstadoApp.Corrida && _corrida!.Naves[lane].Roleta.Visivel, RectCaixa(lane));
-        Mostrar(Vidro.Telemetria, true, RectTelemetria());
+        Mostrar(Vidro.Telemetria, jogo, RectTelemetria());
         Mostrar(Vidro.Mapa, jogo, RectMapa());
         Mostrar(Vidro.Config, Config.Aberta, RectConfig());
         Mostrar(Vidro.Cartao, !Config.Aberta && _estado is EstadoApp.Atracao or EstadoApp.Resultado,
@@ -393,8 +397,8 @@ public partial class Hud : Control
             }
             Relogio(c);
             Minimapa(c);
+            Telemetria(c);
         }
-        Telemetria(c);
 
         switch (_estado)
         {
@@ -501,8 +505,15 @@ public partial class Hud : Control
         }
 
         c.DrawLine(new Vector2(r.Position.X + 30f, r.End.Y - 52f), new Vector2(r.End.X - 30f, r.End.Y - 52f), Neutra, 1f);
-        TextoCentro(c, "↑ ↓ escolhe   ·   ← → muda   ·   clique também vale   ·   Esc ou Enter fecha",
-                    r.GetCenter().X, r.End.Y - 38f, 19, Fraco);
+
+        // O aviso de id repetido saiu do rodapé junto com o resto, mas não podia
+        // simplesmente sumir: é a única pista de por que um controle não responde.
+        if (_serial.IdsRepetidos)
+            TextoCentro(c, "dois controles ESP com o mesmo id: tools/controle_esp.py --definir-id",
+                        r.GetCenter().X, r.End.Y - 38f, 19, Paleta.Alerta);
+        else
+            TextoCentro(c, "↑ ↓ escolhe   ·   ← → muda   ·   clique também vale   ·   Esc ou Enter fecha",
+                        r.GetCenter().X, r.End.Y - 38f, 19, Fraco);
     }
 
     /// <summary>
@@ -808,44 +819,46 @@ public partial class Hud : Control
         TextoCentro(c, "tempo de prova", Tela.X / 2f, 88f, 16, Fraco);
     }
 
+    /// <summary>
+    /// EMPUXO: o que cada nave está mandando para o motor, de 0 a 1.
+    ///
+    /// O número é lido do BARRAMENTO DE SAÍDA e não das naves, e isso é o ponto
+    /// inteiro deste rodapé: é o contrato com o hardware mostrado ao vivo. Se um
+    /// efeito não aparece aqui, ele não chegou ao PWM e o carrinho de verdade
+    /// não o sentiria. "Empuxo" é o nome de tela; o valor continua sendo o duty
+    /// de 0 a 1 que vai para a pista.
+    ///
+    /// Tudo o que dividia espaço com ele — contagem de controles ESP, modo de
+    /// câmera, rodapé de eventos — saiu: ou é escolha, e mora nas configurações,
+    /// ou já é dito em cima da nave pelos marcadores.
+    /// </summary>
     private void Telemetria(CanvasItem c)
     {
         var r = RectTelemetria();
-        float y = r.Position.Y;
-        Texto(c, "telemetria · saída para as pistas", new Vector2(24f, y + 26f), 16, Fraco);
-
-        string serial = _serial.Conectados switch
-        {
-            0 => "nenhum controle ESP conectado",
-            1 => "1 controle ESP conectado",
-            int k => $"{k} controles ESP conectados",
-        };
-        Texto(c, serial, new Vector2(400f, y + 26f), 16, _serial.Conectados > 0 ? Paleta.Ok : Fraco);
-        if (_serial.IdsRepetidos)
-            Texto(c, "dois controles com o mesmo id: tools/controle_esp.py --definir-id", new Vector2(640f, y + 26f), 16, Paleta.Alerta);
-        else
-            Texto(c, $"câmera: {_modoCamera}", new Vector2(640f, y + 26f), 16, Fraco);
-
+        float meio = r.Position.Y + 38f;
         string[] alertas = { "superaquecido", "parado pela bomba", "teto reduzido" };
+
+        Texto(c, "empuxo", new Vector2(28f, meio - 1f), 17, Fraco);
+
+        // Os dois blocos nascem do centro da tela para fora, espelhados: assim
+        // cada jogador lê o próprio do lado em que o painel dele está.
+        const float larguraBloco = 400f;
         for (int lane = 0; lane < 2; lane++)
         {
-            // 560 e não 520: o rótulo de efeito mais longo ("teto reduzido +
-            // escudo (1 trecho)") encostava no bloco da pista 2.
-            float bx = 24f + lane * 560f, by = y + 64f;
+            var nave = _corrida!.Naves[lane];
             Color cor = Paleta.DoJogador(lane);
             float pwm = (float)_saida.Pwm(lane);
             string tag = string.IsNullOrEmpty(_saida.Tag(lane)) ? "livre" : _saida.Tag(lane);
-            Texto(c, $"pista {lane + 1}", new Vector2(bx, by), 20, cor, true);
-            Barra(c, new Rect2(bx + 88f, by - 14f, 150f, 14f), pwm, cor);
-            Texto(c, $"pwm {pwm:0.00}", new Vector2(bx + 250f, by), 20, Paleta.Texto);
-            Texto(c, tag, new Vector2(bx + 350f, by), 18, alertas.Any(a => tag.Contains(a)) ? Paleta.Alerta : Fraco);
-        }
+            bool ruim = alertas.Any(a => tag.Contains(a));
 
-        float ly = y + 26f;
-        foreach (var linha in _corrida!.Log.Skip(Math.Max(0, _corrida.Log.Count - 3)))
-        {
-            TextoDir(c, linha.Texto, Tela.X - 24f, ly, 17, Paleta.DoTom(linha.Tom));
-            ly += 22f;
+            float x0 = lane == 0
+                ? Tela.X / 2f - 30f - larguraBloco
+                : Tela.X / 2f + 30f;
+
+            Texto(c, nave.Nome, new Vector2(x0, meio), 22, cor, true);
+            Barra(c, new Rect2(x0 + 92f, meio - 15f, 132f, 15f), pwm, cor);
+            Texto(c, $"{pwm:0.00}", new Vector2(x0 + 236f, meio), 22, Paleta.Texto, true);
+            Texto(c, tag, new Vector2(x0 + 292f, meio - 1f), 17, ruim ? Paleta.Alerta : Fraco);
         }
     }
 
@@ -899,7 +912,7 @@ public partial class Hud : Control
         }
 
         c.DrawLine(new Vector2(r.Position.X + 30f, r.End.Y - 52f), new Vector2(r.End.X - 30f, r.End.Y - 52f), Neutra, 1f);
-        TextoCentro(c, "R durante a corrida volta para este menu  \u00b7  F11 tela cheia  \u00b7  Esc sai",
+        TextoCentro(c, "R volta para este menu  \u00b7  C c\u00e2mera  \u00b7  Q qualidade  \u00b7  M som  \u00b7  N voz do motor  \u00b7  F11 tela cheia  \u00b7  Esc sai",
                     r.GetCenter().X, r.End.Y - 38f, 19, Fraco);
     }
 

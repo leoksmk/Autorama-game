@@ -92,6 +92,12 @@ qualidade, câmera e "como se joga". Setas escolhem e mudam, o mouse também
 clica (metade direita da linha avança, a esquerda volta), `Esc` ou `Enter`
 fecha.
 
+O **rodapé** mostra uma coisa só durante a corrida: o **empuxo** de cada nave
+(o PWM, de 0 a 1) e o efeito que está limitando o motor. Contagem de controles
+ESP, modo de câmera e o rodapé de eventos saíram — ou são escolha, e moram
+aqui nas configurações, ou já são ditos em cima da nave pelos marcadores. Na
+tela inicial não há rodapé nenhum.
+
 **Aquecimento do motor** pode ser desligado. Desligado, o acelerador não tem
 teto de esforço sustentável: martelar no talo a prova inteira passa a ser a
 jogada certa e o que sobra de decisão é a caixa de item. Existe porque numa
@@ -665,9 +671,11 @@ tools/controle_esp.py        utilitário de bancada dos controles
 tests/                       testes do núcleo C#
 ```
 
-- `Corrida` é o único ponto que escreve no `IBarramentoSaida`. O rodapé de
-  telemetria lê do barramento (`SaidaNula`), não das naves: se um efeito não
-  aparece ali, ele não chegou ao PWM.
+- `Corrida` é o único ponto que escreve no `IBarramentoSaida`. O **rodapé de
+  empuxo** lê do barramento (`SaidaNula`), não das naves: se um efeito não
+  aparece ali, ele não chegou ao PWM. "Empuxo" é só o nome de tela — o número
+  continua sendo o duty de 0 a 1 que vai para a pista, e é por isso que o
+  rodapé existe mesmo sendo o front-end.
 - `Efeitos3D` implementa `IEfeitos` e não decide nada. Os projéteis seguem a
   lista oficial `Corrida.EmVoo`; quando a regra resolve a chegada, o estouro cai
   no mesmo frame em que o PWM do alvo muda.
