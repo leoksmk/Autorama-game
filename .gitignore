@@ -37,3 +37,6 @@ desktop.ini
 
 # Log de contexto arquivado pelo hook: mesma coisa que o CONTEXT_LOG.md
 **/.claude/CONTEXT_LOG_ARCHIVE_*.md
+
+# Capturas para conferir tracado contra o desenho
+/capturas/

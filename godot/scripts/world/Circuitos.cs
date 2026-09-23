@@ -4,6 +4,8 @@
 // medidos, não estimados, e dá para remedir a qualquer momento com
 // `jogar.bat --medir-pistas`, que mede ESTE código e não uma cópia dele.
 
+using System;
+using System.Collections.Generic;
 using Godot;
 
 namespace OrbitalDerby.Mundo;
@@ -161,15 +163,21 @@ public static class Circuitos
     };
 
     /// <summary>
-    /// PLANTA BAIXA — o traçado do desenho técnico da pista física: 1,20 m x
-    /// 0,80 m de tampo, 3,4 m de pista, anel arredondado com a língua subindo
-    /// no meio. Aqui ele está ampliado 110x, para a nave ficar do tamanho certo
-    /// em relação ao leito.
+    /// PLANTA BAIXA — o traçado do desenho técnico da pista física: 1,20 m ×
+    /// 0,80 m de tampo, 3,3 m de pista. Aqui está ampliado 110×, para a nave
+    /// ficar do tamanho certo em relação ao leito.
     ///
-    /// É a única PLANA, e plana de verdade: altura zero em todo ponto de
-    /// controle e InclinacaoMax = 0. Uma placa de MDF não tem sobrelevação nem
-    /// rampa, e a graça desta pista é ser a que vai existir de fato — os
-    /// checkpoints aqui são onde os sensores vão ser parafusados.
+    /// É descrito por CANTOS e não por pontos soltos de spline, e essa é a
+    /// diferença que importa: uma pista de autorama é montada com peças retas e
+    /// peças de curva de raio fixo, então metade desta volta é reta de verdade
+    /// e o resto são arcos de raio constante. Descrita como spline livre, ela
+    /// saía curvando o tempo todo e com curvas abertas demais — parecida de
+    /// longe, errada de perto.
+    ///
+    /// É também a única PLANA: altura zero em todo canto e InclinacaoMax = 0.
+    /// Uma placa de MDF não tem sobrelevação nem rampa, e a graça desta pista é
+    /// ser a que vai existir de fato — os checkpoints aqui são onde os sensores
+    /// vão ser parafusados.
     ///
     /// Para remedir contra a placa: cada 110 m de volta no jogo é 1 m de pista
     /// no tampo.
@@ -177,57 +185,32 @@ public static class Circuitos
     public static readonly Circuito PlantaBaixa = new()
     {
         Nome = "PLANTA BAIXA",
-        Resumo = "377 m · o desenho da pista física, 1,20 × 0,80 m · plana",
-        Controle = Tampo(new[]
+        Resumo = "365 m · o desenho da pista física, 1,20 × 0,80 m · plana, reta e travada",
+        // (x, z, raio) em METROS DO TAMPO, x para a direita e z para cima na
+        // planta. Sentido de percurso: para leste na reta de cima.
+        Controle = Tampo(new (float, float, float)[]
         {
-            // (x, z) em METROS DO DESENHO, com x para a direita e z para baixo
-            // na planta. Sentido de percurso: para a direita na reta de cima.
-            // -- reta principal, borda de cima, rumo leste
-            (0.22f, 0.73f), (0.42f, 0.74f), (0.64f, 0.74f), (0.86f, 0.73f),
-            // -- grampo do leste: o 180° amplo, os 0,60 m do desenho
-            (1.03f, 0.69f), (1.13f, 0.57f), (1.14f, 0.40f), (1.07f, 0.23f),
-            // -- borda de baixo à direita, rumo oeste
-            (0.93f, 0.13f), (0.79f, 0.11f),
-            // -- sobe para o miolo: parede direita da mordida
-            (0.70f, 0.18f), (0.66f, 0.31f), (0.67f, 0.43f),
-            // -- língua do meio, rumo oeste
-            (0.60f, 0.50f), (0.48f, 0.50f),
-            // -- desce de volta: parede esquerda da mordida
-            (0.40f, 0.44f), (0.36f, 0.31f), (0.37f, 0.18f),
-            // -- borda de baixo à esquerda, rumo oeste
-            (0.31f, 0.11f), (0.21f, 0.09f),
-            // -- grampo do oeste, fechando a volta
-            (0.11f, 0.15f), (0.06f, 0.29f), (0.06f, 0.50f), (0.12f, 0.66f),
+            (0.10f, 0.70f, 0.17f),    // canto superior esquerdo
+            (1.10f, 0.70f, 0.17f),    // canto superior direito
+            (1.10f, 0.13f, 0.15f),    // canto inferior direito
+            (0.70f, 0.13f, 0.075f),   // entrada do degrau: sobe
+            (0.70f, 0.42f, 0.075f),   // topo do degrau: vira a oeste
+            (0.34f, 0.42f, 0.075f),   // fim do degrau: desce
+            (0.34f, 0.13f, 0.075f),   // volta para a borda de baixo
+            (0.10f, 0.13f, 0.14f),    // canto inferior esquerdo
         }),
-        Checkpoints = new[] { 0.08, 0.30, 0.52, 0.74 },
-        Ritmo = 0.62,
-        Largura = 9f,
-        OffsetFaixa = 2.2f,
+        Checkpoints = new[] { 0.06, 0.28, 0.50, 0.72 },
+        Ritmo = 0.64,
+        Largura = 8f,            // mais estreita: os cantos têm 8 m de raio
+        OffsetFaixa = 2.0f,
         InclinacaoMax = 0f,      // placa de MDF não tem sobrelevação
         RaioDeReferencia = 26f,
-        // Fora do circuito: o meio do tampo é ocupado pela língua.
+        // Fora do circuito: o meio do tampo é ocupado pelo degrau.
         EstacaoPos = new Vector3(0f, 34f, -190f),
         EstacaoRaio = 32f,
     };
 
     public static readonly Circuito[] Todos = { Icaro, PlantaBaixa, Interlagos, IcaroOriginal, Classica };
-
-    /// <summary>
-    /// Converte metros do DESENHO em metros do jogo: centra a placa na origem,
-    /// amplia 110x e espelha o eixo de profundidade, para a reta de cima do
-    /// desenho ficar em cima também na câmera de visão geral.
-    /// </summary>
-    private static Vector3[] Tampo((float x, float z)[] pontos)
-    {
-        const float larguraDoTampo = 1.20f, alturaDoTampo = 0.80f;
-        const float escala = 132f / larguraDoTampo;   // 132 m de circuito no jogo
-        var v = new Vector3[pontos.Length];
-        for (int i = 0; i < pontos.Length; i++)
-            v[i] = new Vector3((pontos[i].x - larguraDoTampo * 0.5f) * escala,
-                               0f,
-                               (alturaDoTampo * 0.5f - pontos[i].z) * escala);
-        return v;
-    }
 
     public static Circuito PorNome(string nome)
     {
@@ -244,6 +227,124 @@ public static class Circuitos
                 return i;
         return 0;
     }
+
+    /// <summary>
+    /// Constrói o polígono de controle de uma pista descrita por CANTOS: uma
+    /// polilinha fechada em que cada vértice vira um arco de raio fixo, ligado
+    /// por retas. É como uma pista de autorama é de verdade, e é o que dá
+    /// retas que são retas em vez de curvas muito abertas.
+    ///
+    /// Também converte metros do tampo em metros do jogo: centra a placa na
+    /// origem, amplia 110× e espelha a profundidade, para a reta de cima do
+    /// desenho ficar em cima na câmera de visão geral.
+    /// </summary>
+    private static Vector3[] Tampo((float x, float z, float raio)[] cantos)
+    {
+        const float larguraDoTampo = 1.20f, alturaDoTampo = 0.80f;
+        const float escala = 132f / larguraDoTampo;
+        const float passo = 0.012f;      // metros de tampo entre pontos de controle
+
+        int n = cantos.Length;
+        var vertice = new Vector2[n];
+        var raio = new float[n];
+        for (int i = 0; i < n; i++)
+        {
+            vertice[i] = new Vector2(cantos[i].x, cantos[i].z);
+            raio[i] = cantos[i].raio;
+        }
+
+        EncolherRaios(vertice, raio);
+
+        // Onde cada arco começa, termina e em volta de quê.
+        var ini = new Vector2[n];
+        var fim = new Vector2[n];
+        var centro = new Vector2[n];
+        var anguloInicial = new float[n];
+        var giro = new float[n];
+        for (int i = 0; i < n; i++)
+        {
+            var (entra, sai, curva) = Esquina(vertice, i);
+            giro[i] = curva;
+            if (MathF.Abs(curva) < 1e-5f)
+            {
+                ini[i] = fim[i] = vertice[i];
+                continue;
+            }
+            float t = raio[i] * MathF.Abs(MathF.Tan(curva * 0.5f));
+            ini[i] = vertice[i] - entra * t;
+            fim[i] = vertice[i] + sai * t;
+            float lado = MathF.Sign(curva);
+            centro[i] = ini[i] + new Vector2(-entra.Y, entra.X) * (raio[i] * lado);
+            anguloInicial[i] = (ini[i] - centro[i]).Angle();
+        }
+
+        var pts = new List<Vector3>();
+        void Por(Vector2 v) =>
+            pts.Add(new Vector3((v.X - larguraDoTampo * 0.5f) * escala,
+                                0f,
+                                (alturaDoTampo * 0.5f - v.Y) * escala));
+
+        for (int i = 0; i < n; i++)
+        {
+            // Reta: do fim do arco anterior até o começo deste.
+            Vector2 de = fim[(i - 1 + n) % n], ate = ini[i];
+            int k = Math.Max(1, (int)(de.DistanceTo(ate) / passo));
+            for (int j = 0; j < k; j++)
+                Por(de.Lerp(ate, (float)j / k));
+
+            if (MathF.Abs(giro[i]) < 1e-5f)
+                continue;
+
+            // Arco de raio fixo em volta do canto.
+            float r = centro[i].DistanceTo(ini[i]);
+            int a = Math.Max(2, (int)(MathF.Abs(giro[i]) * r / passo));
+            for (int j = 0; j < a; j++)
+            {
+                float ang = anguloInicial[i] + giro[i] * ((float)j / a);
+                Por(centro[i] + new Vector2(MathF.Cos(ang), MathF.Sin(ang)) * r);
+            }
+        }
+        return pts.ToArray();
+    }
+
+    /// <summary>Direção de entrada, de saída e ângulo de virada num canto.</summary>
+    private static (Vector2 entra, Vector2 sai, float giro) Esquina(Vector2[] v, int i)
+    {
+        int n = v.Length;
+        Vector2 entra = (v[i] - v[(i - 1 + n) % n]).Normalized();
+        Vector2 sai = (v[(i + 1) % n] - v[i]).Normalized();
+        return (entra, sai, MathF.Atan2(entra.Cross(sai), entra.Dot(sai)));
+    }
+
+    /// <summary>
+    /// Reduz os raios que não cabem no trecho reto entre dois cantos.
+    ///
+    /// Dois arcos tangentes só cabem se a soma das tangentes for menor que a
+    /// distância entre os vértices. Sem esta trava, um canto come o outro e o
+    /// traçado sai com raio zero e borda interna NEGATIVA — pista atravessando
+    /// a si mesma, e sem nenhum aviso: foi o que aconteceu na primeira tentativa
+    /// de encaixar o degrau perto do canto inferior esquerdo.
+    /// </summary>
+    private static void EncolherRaios(Vector2[] vertice, float[] raio)
+    {
+        int n = vertice.Length;
+        for (int passada = 0; passada < 4; passada++)
+            for (int i = 0; i < n; i++)
+            {
+                int j = (i + 1) % n;
+                float comprimento = vertice[i].DistanceTo(vertice[j]);
+                float ti = Tangente(vertice, raio, i);
+                float tj = Tangente(vertice, raio, j);
+                if (ti + tj <= comprimento * 0.98f || ti + tj <= 1e-6f)
+                    continue;
+                float k = comprimento * 0.98f / (ti + tj);
+                raio[i] *= k;
+                raio[j] *= k;
+            }
+    }
+
+    private static float Tangente(Vector2[] v, float[] raio, int i) =>
+        raio[i] * MathF.Abs(MathF.Tan(Esquina(v, i).giro * 0.5f));
 
     /// <summary>
     /// Pontos de controle que reproduzem a elipse modulada da 2D.

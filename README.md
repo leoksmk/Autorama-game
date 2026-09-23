@@ -125,7 +125,7 @@ A 3D tem cinco pistas. A escolha é feita no menu (engrenagem no alto) ou por
 | Circuito | Volta | Em tela | Volta em | Prova | Raio mín. | Banco | Rampa |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | **ANEL DE ÍCARO** | 387 m | 145 km/h | 9,6 s | 5 voltas, ~48 s | 16,6 m | 22° | 7,6% |
-| **PLANTA BAIXA** | 377 m | 135 km/h | 10,1 s | 5 voltas, ~50 s | 11,0 m | **0°** | **0%** |
+| **PLANTA BAIXA** | 365 m | 135 km/h | 9,7 s | 5 voltas, ~49 s | 8,2 m | **0°** | **0%** |
 | **INTERLAGOS ORBITAL** | 709 m | 150 km/h | 17,0 s | 3 voltas, ~51 s | 10,3 m | 25° | 9,6% |
 | **ÍCARO BRUTO** | 387 m | 145 km/h | 9,6 s | 5 voltas, ~48 s | 14,3 m | 42° | 18,6% |
 | **ÓRBITA CLÁSSICA** | 317 m | 126 km/h | 9,1 s | 5 voltas, ~46 s | 17,0 m | 16° | 9,0% |
@@ -140,13 +140,26 @@ Esses números não são estimativa: saem do próprio código, com
   direita fechada, em descida), curvão, reta oposta no fundo do vale e a subida
   do zênite.
 - **PLANTA BAIXA** é o traçado do desenho técnico da pista física — 1,20 m ×
-  0,80 m de tampo, anel arredondado com a língua subindo no meio. É a única
-  **plana**, e plana de verdade: altura zero em todo ponto de controle e
-  `InclinacaoMax = 0`, porque uma placa de MDF não tem sobrelevação nem rampa.
-  No jogo ela está ampliada 110×, para a nave ficar do tamanho certo em relação
-  ao leito. **Para remedir contra a placa: cada 110 m de volta no jogo é 1 m de
-  pista no tampo** — os 377 m do jogo são 3,43 m de pista sobre a placa. Os
-  checkpoints aqui são onde os sensores vão ser parafusados.
+  0,80 m de tampo, anel de cantos travados com um degrau no meio de baixo.
+  É a única descrita por **CANTOS** em vez de pontos soltos de spline, e essa é
+  a diferença que importa: pista de autorama é montada com peças retas e peças
+  de curva de raio fixo, então **metade desta volta é reta de verdade** e o
+  resto são arcos de raio constante. Descrita como spline livre, ela saía
+  curvando o tempo todo e com curvas abertas demais — parecida de longe, errada
+  de perto.
+
+  É também a única **plana**: altura zero em todo canto e `InclinacaoMax = 0`,
+  porque uma placa de MDF não tem sobrelevação nem rampa. No jogo está ampliada
+  110×, para a nave ficar do tamanho certo em relação ao leito. **Para remedir
+  contra a placa: cada 110 m de volta no jogo é 1 m de pista no tampo** — os
+  365 m do jogo são 3,32 m de pista sobre a placa. Os checkpoints aqui são onde
+  os sensores vão ser parafusados.
+
+  O construtor de cantos (`Circuitos.Tampo`) **encolhe sozinho o raio que não
+  cabe** no trecho reto entre dois cantos. Sem essa trava, um canto come o
+  outro e o traçado sai com raio zero e borda interna negativa — pista
+  atravessando a si mesma, sem nenhum aviso. Foi o que aconteceu na primeira
+  tentativa de encaixar o degrau perto do canto inferior esquerdo.
 - **INTERLAGOS ORBITAL** é a homenagem, com os marcos na mesma ordem do
   original: reta dos boxes, o S, Curva do Sol, Reta Oposta, Descida do Lago,
   Ferradura, Pinheirinho, Bico de Pato, Mergulho, Junção e Subida dos Boxes. É
