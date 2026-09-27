@@ -1,5 +1,21 @@
 # ORBITAL DERBY
 
+## ▶ Jogar agora
+
+| | |
+| --- | --- |
+| **Baixar para Windows** | [**Orbital-Derby-Windows.zip**](https://github.com/leoksmk/Autorama-game/releases/latest) — a versão 3D. Descompacte a pasta e clique duas vezes em `Orbital Derby.exe`. Não precisa instalar Godot, .NET nem Python: tudo vai junto. |
+| **Jogar no navegador** | <https://leoksmk.github.io/Autorama-game/> — a versão 2D, sem baixar nada. |
+
+> ⚠️ O botão verde **Code › Download ZIP** desta página baixa o **código-fonte**,
+> não o jogo. Para jogar, use um dos dois links de cima.
+>
+> Na primeira vez o Windows vai avisar *"O Windows protegeu seu PC"* — é porque o
+> executável não tem assinatura digital paga. Clique em **Mais informações** e
+> depois em **Executar assim mesmo**.
+
+---
+
 Front-end de um autorama de 2 pistas com tema espacial original. O mesmo jogo
 existe em duas versões:
 
@@ -71,6 +87,38 @@ chamando o executável do Godot, elas vão depois de `--`:
 | `--sair-em=<s>` | fecha sozinho depois de *s* segundos |
 | `--motor=` | voz dos motores: `propulsor` (padrão) ou `caca` |
 | `--som-wav=<pasta>` | grava o banco de sons em `.wav` e fecha |
+
+### Gerar o executável
+
+O `.zip` que os jogadores baixam sai de:
+
+```powershell
+python tools/build_exe.py
+```
+
+Resultado: `dist/Orbital-Derby-Windows.zip`, com o `Orbital Derby.exe`, o
+`.pck`, as DLLs do .NET e o `LEIA-ME.txt` numa pasta só. O `.exe` **não abre
+sozinho** — os três precisam viajar juntos, e é por isso que o que se publica é
+o zip e não o executável solto.
+
+Além do Godot 4.7.2 .NET e do .NET SDK 9, isso exige os **export templates**,
+que não vêm com o editor: Godot › *Editor* › *Gerenciar Modelos de Exportação* ›
+*Baixar e Instalar*. É ~1 GB, uma vez só. O preset usado está versionado em
+[`godot/export_presets.cfg`](godot/export_presets.cfg).
+
+**Publicar uma versão** não exige nada disso na sua máquina:
+
+```powershell
+git tag v1.0
+git push --tags
+```
+
+A tag dispara [`.github/workflows/release-windows.yml`](.github/workflows/release-windows.yml),
+que roda o mesmo `build_exe.py` num Windows limpo na nuvem — baixando Godot e
+templates por lá — e cria o Release com o zip anexado. O link
+`releases/latest` do topo deste arquivo passa a apontar para ele
+automaticamente. Para testar sem criar Release, use *Run workflow* na aba
+**Actions**: o zip fica como artefato para baixar e conferir.
 
 ### Teclas
 

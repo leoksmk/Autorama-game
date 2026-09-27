@@ -1,0 +1,75 @@
+﻿================================================================
+  ORBITAL DERBY — autorama espacial de 2 pistas
+================================================================
+
+COMO ABRIR
+----------
+Clique duas vezes em "Orbital Derby.exe", nesta mesma pasta.
+
+Não precisa instalar nada. Não precisa de Godot, nem de .NET, nem
+de Python: tudo que o jogo usa está aqui dentro.
+
+Mantenha os arquivos JUNTOS. O "Orbital Derby.exe" sozinho não
+abre — ele precisa do "Orbital Derby.pck" e da pasta
+"data_Orbital Derby_windows_x86_64" ao lado dele. Se você quiser
+um atalho na área de trabalho, clique no .exe com o botão direito
+e escolha "Enviar para > Área de trabalho (criar atalho)".
+
+
+"O WINDOWS PROTEGEU SEU PC" — e agora?
+--------------------------------------
+Isso aparece na primeira vez, e é normal: o jogo não tem
+assinatura digital paga, e o Windows desconfia de todo programa
+novo que ele nunca viu antes.
+
+Clique em "Mais informações" e depois em "Executar assim mesmo".
+
+Se o antivírus apagar o arquivo, foi falso positivo — baixe de
+novo e marque como permitido.
+
+
+JOGANDO DE DOIS
+---------------
+Duas pessoas no mesmo teclado. Cada uma tem uma nave.
+
+                    ACELERADOR         AÇÃO
+                    (martele!)      (escudo/item)
+  ÍON   (pista 1)       A                 S
+  ÍGNIS (pista 2)       L                 K
+
+O acelerador não é para segurar: é para MARTELAR. Cada toque é um
+empurrão. Bater rápido demais esquenta o motor e ele corta — achar
+o ritmo certo é o jogo.
+
+  ESPAÇO   começa a corrida
+  R        reinicia
+  TAB      configurações (pista, som, como se joga)
+  C        troca a câmera
+  Q        troca a qualidade gráfica
+  M        muta o som
+  F11      tela cheia
+  ESC      sai
+
+Tudo que é escolha — qual pista, quem joga em cada nave, som,
+qualidade — está na engrenagem no alto da tela, ou no TAB. As
+regras completas também estão lá, em "como se joga".
+
+
+SE NÃO ABRIR
+------------
+O jogo precisa de uma placa de vídeo com Vulkan. Praticamente todo
+computador de 2016 pra cá tem, mas se a tela ficar preta ou
+aparecer um erro de vídeo:
+
+  1. atualize o driver da placa de vídeo;
+  2. se o problema continuar, use a versão 2D, que roda direto no
+     navegador e não precisa de nada:
+     https://leoksmk.github.io/Autorama-game/
+
+Windows 10 ou 11, 64 bits.
+
+
+================================================================
+  Código, versão 2D e a pista física com ESP32:
+  https://github.com/leoksmk/Autorama-game
+================================================================

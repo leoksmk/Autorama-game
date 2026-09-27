@@ -40,3 +40,6 @@ desktop.ini
 
 # Capturas para conferir tracado contra o desenho
 /capturas/
+
+# Pacote do executavel Windows gerado por tools/build_exe.py
+/dist/

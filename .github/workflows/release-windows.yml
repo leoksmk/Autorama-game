@@ -1,0 +1,132 @@
+# Gera o .zip jogável do Orbital Derby 3D e publica como Release.
+#
+# Quando roda:
+#   - ao empurrar uma tag `v*` (ex.: `git tag v1.0 && git push --tags`):
+#     compila e CRIA o Release com o .zip anexado;
+#   - no botão "Run workflow" (aba Actions): compila e deixa o .zip como
+#     artefato para baixar e conferir, SEM criar Release. É o modo de teste.
+#
+# Por que na nuvem e não só no PC: aqui o build sai do código exato da tag, numa
+# máquina limpa, e continua funcionando mesmo que o Godot de quem desenvolve
+# esteja em outra versão. O script que compila é o mesmo dos dois lados —
+# tools/build_exe.py.
+#
+# Os caminhos usam barra normal de propósito: o PowerShell aceita `/` no
+# Windows, e sem backslash não há como escapar errado dentro do YAML.
+
+name: Release Windows
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-windows-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GODOT_VERSAO: 4.7.2-stable
+  GODOT_NOME: Godot_v4.7.2-stable_mono_win64
+  GODOT_TEMPLATES: Godot_v4.7.2-stable_mono_export_templates.tpz
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "9.0.x"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # O editor (~120 MB) e os export templates (~1 GB) não mudam entre builds
+      # da mesma versão do Godot. Sem cache, cada release gasta vários minutos
+      # só baixando.
+      #
+      # O cache guarda os templates DENTRO do workspace, não em %APPDATA%: o
+      # `${{ env.X }}` do Actions só vê o bloco `env:` deste arquivo, nunca as
+      # variáveis de ambiente da máquina, então `env.APPDATA` sairia vazio e o
+      # cache apontaria para o lugar errado. Um passo separado copia daqui para
+      # onde o Godot procura.
+      - name: Cache do Godot
+        id: cache-godot
+        uses: actions/cache@v4
+        with:
+          path: |
+            godot-editor
+            godot-templates
+          key: godot-${{ env.GODOT_VERSAO }}-mono-win64
+
+      - name: Baixar o Godot .NET e os export templates
+        if: steps.cache-godot.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          $base = "https://github.com/godotengine/godot/releases/download/$env:GODOT_VERSAO"
+
+          Write-Host "--- editor ---"
+          Invoke-WebRequest "$base/$env:GODOT_NOME.zip" -OutFile editor.zip
+          Expand-Archive editor.zip -DestinationPath godot-editor -Force
+
+          Write-Host "--- export templates ---"
+          # O .tpz é um zip comum, mas o Expand-Archive olha a extensão e
+          # recusa .tpz — daí o -OutFile já sair com .zip.
+          Invoke-WebRequest "$base/$env:GODOT_TEMPLATES" -OutFile templates.zip
+          Expand-Archive templates.zip -DestinationPath tpz -Force
+
+          # O templates/version.txt traz o nome exato da pasta que o Godot
+          # procura (ex.: "4.7.2.stable.mono"). Ler dele evita chutar errado.
+          $versao = (Get-Content "tpz/templates/version.txt" -Raw).Trim()
+          $destino = "godot-templates/$versao"
+          New-Item -ItemType Directory -Force -Path $destino | Out-Null
+          Move-Item "tpz/templates/*" $destino -Force
+          Write-Host "templates: $versao"
+
+      - name: Instalar os templates onde o Godot procura
+        shell: pwsh
+        run: |
+          $destino = "$env:APPDATA/Godot/export_templates"
+          New-Item -ItemType Directory -Force -Path $destino | Out-Null
+          Copy-Item "godot-templates/*" $destino -Recurse -Force
+          Get-ChildItem $destino | ForEach-Object {
+            $n = (Get-ChildItem $_.FullName -File).Count
+            Write-Host "  $($_.Name) - $n arquivos"
+          }
+
+      - name: Onde o Godot ficou
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem godot-editor -Recurse -Filter "$env:GODOT_NOME.exe" |
+                 Select-Object -First 1
+          if (-not $exe) { throw "nao achei o $env:GODOT_NOME.exe em godot-editor/" }
+          "GODOT=$($exe.FullName)" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          Write-Host $exe.FullName
+
+      - name: Compilar e empacotar
+        run: python tools/build_exe.py
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Orbital-Derby-Windows
+          path: dist/Orbital-Derby-Windows.zip
+          if-no-files-found: error
+
+      # Só quando a tag existe. O texto do Release mora em
+      # .github/release-notes.md — aqui dentro ele não caberia: o here-string do
+      # PowerShell exige o fechamento na coluna 1, o que quebra a indentação do
+      # YAML.
+      - name: Publicar o Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ github.ref_name }}" "dist/Orbital-Derby-Windows.zip" --title "Orbital Derby ${{ github.ref_name }}" --notes-file ".github/release-notes.md"
