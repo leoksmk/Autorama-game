@@ -115,11 +115,12 @@ que não vêm com o editor: Godot › *Editor* › *Gerenciar Modelos de Exporta
 [`.github/workflows/release-windows.yml`](.github/workflows/release-windows.yml),
 que roda o mesmo `build_exe.py` num Windows limpo na nuvem — baixando Godot e
 templates por lá — e **substitui o zip** do release `ultima`, que é exatamente o
-que o link do topo deste arquivo baixa. Commitou, quem clicar no link depois de
-uns dez minutos já pega a versão nova.
+que o link do topo deste arquivo baixa. Commitou, quem clicar no link
+uns dois minutos depois já pega a versão nova (medido: 128 s com o cache do
+Godot quente; a primeira vez, sem cache, leva mais).
 
 Mudanças só em texto (`README.md`, `docs/`, `capturas/`) não disparam build: não
-mexem no executável, e um build são ~10 minutos.
+mexem no executável.
 
 Marcar uma tag continua servindo, para outra coisa — guardar um retrato de uma
 versão que prestou, sem tirar o `ultima` do lugar de download:
