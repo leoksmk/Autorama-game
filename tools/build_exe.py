@@ -23,8 +23,11 @@ Quatro coisas que dão errado em silêncio:
 
 1. O Godot só exporta um projeto já IMPORTADO — num clone novo não existe
    `godot/.godot/`, e o export sai com o .pck sem os recursos. Daí o `--import`.
-2. O `.sln` do C# também não está versionado (é o editor que o escreve), então o
-   `--build-solutions` vem antes do export.
+2. O exportador .NET **exige** um `OrbitalDerby.sln` ao lado do .csproj, e
+   nada o cria sozinho: o `--build-solutions` compila o projeto sem escrever
+   solution nenhuma, e o export morre com "no solution file was found" —
+   depois de já ter gerado o executável, o que faz a falha parecer sucesso.
+   Por isso o .sln está versionado, e este script confere se ele está lá.
 3. Conferir se o executável existe NÃO prova que deu certo: ele é uma cópia do
    export template e aparece mesmo quando o C# não compila. O que prova é a
    pasta `data_*_windows_x86_64/` com o OrbitalDerby.dll dentro — é isso que
@@ -135,6 +138,13 @@ def main() -> int:
 
     if not (PROJETO / "export_presets.cfg").exists():
         print(f"faltando: {PROJETO / 'export_presets.cfg'}")
+        return 1
+
+    # Conferido aqui porque o export só reclama disso depois de já ter escrito o
+    # executável, e a falha passa por sucesso. Ver o item 2 lá em cima.
+    if not (PROJETO / "OrbitalDerby.sln").exists():
+        print(f"faltando: {PROJETO / 'OrbitalDerby.sln'}")
+        print("O exportador .NET exige a solution ao lado do .csproj.")
         return 1
 
     saida = DIST / PASTA
