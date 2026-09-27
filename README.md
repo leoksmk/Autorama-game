@@ -4,7 +4,7 @@
 
 | | |
 | --- | --- |
-| **Baixar para Windows** | [**Orbital-Derby-Windows.zip**](https://github.com/leoksmk/Autorama-game/releases/latest) — a versão 3D. Descompacte a pasta e clique duas vezes em `Orbital Derby.exe`. Não precisa instalar Godot, .NET nem Python: tudo vai junto. |
+| **Baixar para Windows** | [**Baixar o Orbital-Derby-Windows.zip**](https://github.com/leoksmk/Autorama-game/releases/latest/download/Orbital-Derby-Windows.zip) — a versão 3D. Descompacte a pasta e clique duas vezes em `Orbital Derby.exe`. Não precisa instalar Godot, .NET nem Python: tudo vai junto. |
 | **Jogar no navegador** | <https://leoksmk.github.io/Autorama-game/> — a versão 2D, sem baixar nada. |
 
 > ⚠️ O botão verde **Code › Download ZIP** desta página baixa o **código-fonte**,
