@@ -101,6 +101,9 @@ Resultado: `dist/Orbital-Derby-Windows.zip`, com o `Orbital Derby.exe`, o
 sozinho** — os três precisam viajar juntos, e é por isso que o que se publica é
 o zip e não o executável solto.
 
+No executável exportado as opções da tabela acima continuam valendo, mas vão
+depois de `--`, como no Godot: `"Orbital Derby.exe" -- --demo --qualidade=media`.
+
 Além do Godot 4.7.2 .NET e do .NET SDK 9, isso exige os **export templates**,
 que não vêm com o editor: Godot › *Editor* › *Gerenciar Modelos de Exportação* ›
 *Baixar e Instalar*. É ~1 GB, uma vez só. O preset usado está versionado em

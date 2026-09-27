@@ -11,7 +11,7 @@ de Python: tudo que o jogo usa está aqui dentro.
 
 Mantenha os arquivos JUNTOS. O "Orbital Derby.exe" sozinho não
 abre — ele precisa do "Orbital Derby.pck" e da pasta
-"data_Orbital Derby_windows_x86_64" ao lado dele. Se você quiser
+"data_OrbitalDerby_windows_x86_64" ao lado dele. Se você quiser
 um atalho na área de trabalho, clique no .exe com o botão direito
 e escolha "Enviar para > Área de trabalho (criar atalho)".
 

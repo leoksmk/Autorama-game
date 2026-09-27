@@ -110,6 +110,20 @@ def pasta_do_dotnet(saida: Path) -> Path | None:
     return None
 
 
+def escrever_leia_me(destino: Path) -> None:
+    """
+    Escreve o LEIA-ME.txt no pacote com quebra de linha do Windows e BOM.
+
+    Escrito em vez de copiado porque o fim de linha do arquivo no repositório
+    depende do `core.autocrlf` de quem clonou, e um .txt só com LF abre como uma
+    linha gigante em editor antigo. O BOM é o que faz o Notepad acertar os
+    acentos sem precisar escolher codificação.
+    """
+    texto = LEIA_ME.read_text(encoding="utf-8-sig")
+    with destino.open("w", encoding="utf-8-sig", newline="\r\n") as f:
+        f.write(texto)
+
+
 def zipar(pasta: Path, destino: Path) -> None:
     """
     Zipa `pasta` mantendo o nome dela como raiz dentro do .zip.
@@ -192,7 +206,7 @@ def main() -> int:
     # aviso do SmartScreen — sem isso muita gente desiste na tela "O Windows
     # protegeu seu PC".
     print("\n[4/5] copiando o LEIA-ME.txt ...")
-    shutil.copy2(LEIA_ME, saida / "LEIA-ME.txt")
+    escrever_leia_me(saida / "LEIA-ME.txt")
 
     print("\n[5/5] zipando ...")
     DIST.mkdir(exist_ok=True)
