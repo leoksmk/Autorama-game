@@ -22,6 +22,13 @@ public partial class CameraRig : Node3D
     public bool Cinematica { get; set; }
     public Camera3D Camera { get; private set; } = null!;
 
+    /// <summary>
+    /// Nave que esta câmera segue, ignorando quem lidera. É o que muda no modo
+    /// de duas telas: cada metade fica presa na sua nave, sem trocar de dono
+    /// quando a outra passa na frente. Nulo = segue quem lidera, como sempre.
+    /// </summary>
+    public int? NaveFixa { get; set; }
+
     private Vector3 _pos, _alvo;
     private float _trauma;
     private double _t;
@@ -59,6 +66,7 @@ public partial class CameraRig : Node3D
 
     public void Atualizar(double dt, NaveVisual[] naves, int lider)
     {
+        lider = NaveFixa ?? lider;
         _t += dt;
         float f = (float)dt;
         float t = (float)_t;

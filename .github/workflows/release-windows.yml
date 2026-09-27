@@ -1,15 +1,17 @@
 # Gera o .zip jogável do Orbital Derby 3D e publica como Release.
 #
 # Quando roda:
-#   - ao empurrar uma tag `v*` (ex.: `git tag v1.0 && git push --tags`):
-#     compila e CRIA o Release com o .zip anexado;
-#   - no botão "Run workflow" (aba Actions): compila e deixa o .zip como
-#     artefato para baixar e conferir, SEM criar Release. É o modo de teste.
+#   - a cada push na `main`: compila e SUBSTITUI o zip do release "ultima", que
+#     é o que o link do README baixa. Commitou, o amigo baixa a versão nova.
+#   - ao empurrar uma tag `v*`: cria um release próprio daquela versão, que fica
+#     guardado. Serve para marcar "esta aqui prestou" e poder voltar nela;
+#   - no botão "Run workflow" (aba Actions): compila e deixa o zip como artefato
+#     para conferir, sem publicar nada.
 #
-# Por que na nuvem e não só no PC: aqui o build sai do código exato da tag, numa
-# máquina limpa, e continua funcionando mesmo que o Godot de quem desenvolve
-# esteja em outra versão. O script que compila é o mesmo dos dois lados —
-# tools/build_exe.py.
+# Por que na nuvem e não só no PC: aqui o build sai do código exato que está no
+# GitHub, numa máquina limpa, e continua funcionando mesmo que o Godot de quem
+# desenvolve esteja em outra versão. O script que compila é o mesmo dos dois
+# lados -- tools/build_exe.py.
 #
 # Os caminhos usam barra normal de propósito: o PowerShell aceita `/` no
 # Windows, e sem backslash não há como escapar errado dentro do YAML.
@@ -18,7 +20,14 @@ name: Release Windows
 
 on:
   push:
+    branches: ["main"]
     tags: ["v*"]
+    # Mexer em texto não muda o executável, e um build são ~10 minutos.
+    paths-ignore:
+      - "README.md"
+      - "docs/**"
+      - "capturas/**"
+      - "orbital-derby-prompt.md"
   workflow_dispatch:
 
 permissions:
@@ -119,14 +128,51 @@ jobs:
           path: dist/Orbital-Derby-Windows.zip
           if-no-files-found: error
 
-      # Só quando a tag existe. O texto do Release mora em
-      # .github/release-notes.md — aqui dentro ele não caberia: o here-string do
-      # PowerShell exige o fechamento na coluna 1, o que quebra a indentação do
-      # YAML.
-      - name: Publicar o Release
+      # A cada push na main. O release "ultima" é apagado e refeito em vez de
+      # só receber o arquivo por cima: um release guarda o commit de onde
+      # saiu, e o `gh release upload` sozinho trocaria o zip deixando a página
+      # dizendo que veio de um commit velho. Apagar com --cleanup-tag leva a
+      # tag junto, e recriar aponta tudo para o commit de agora.
+      #
+      # O --latest é explícito porque é esse release que o link do README
+      # (releases/latest/download/...) tem de servir, e não a última tag.
+      - name: Atualizar o release "ultima"
+        if: github.ref == 'refs/heads/main'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $assunto = git log -1 --pretty=%s
+          $quando = (Get-Date).ToUniversalTime().ToString("yyyy-MM-dd HH:mm 'UTC'")
+          $cabecalho = "Build automático de ``${{ github.sha }}``: $assunto`n`nGerado em $quando.`n`n---`n`n"
+          $cabecalho + (Get-Content ".github/release-notes.md" -Raw) |
+            Set-Content notas.md -Encoding utf8
+
+          # O apagar falha na primeira vez, quando ainda não existe release
+          # nenhum -- e aí não é erro, é o caso normal do primeiro uso. O
+          # PowerShell do runner derruba o passo quando um comando externo sai
+          # com código != 0, então aqui esse comportamento é desligado só em
+          # volta do delete, e religado logo depois para o create continuar
+          # falhando alto se der errado.
+          $PSNativeCommandUseErrorActionPreference = $false
+          gh release delete ultima --yes --cleanup-tag
+          if ($LASTEXITCODE -ne 0) { Write-Host "nao havia release 'ultima' ainda" }
+          $PSNativeCommandUseErrorActionPreference = $true
+          $global:LASTEXITCODE = 0
+
+          gh release create ultima "dist/Orbital-Derby-Windows.zip" `
+            --target "${{ github.sha }}" `
+            --title "Orbital Derby - ultima versao" `
+            --notes-file notas.md `
+            --latest
+
+      # Só quando a tag existe: um retrato daquela versão, guardado. Não leva
+      # --latest, porque quem baixa pelo README tem de continuar recebendo o
+      # "ultima", que é o mais novo.
+      - name: Publicar o release da tag
         if: startsWith(github.ref, 'refs/tags/v')
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "${{ github.ref_name }}" "dist/Orbital-Derby-Windows.zip" --title "Orbital Derby ${{ github.ref_name }}" --notes-file ".github/release-notes.md"
+          gh release create "${{ github.ref_name }}" "dist/Orbital-Derby-Windows.zip" --title "Orbital Derby ${{ github.ref_name }}" --notes-file ".github/release-notes.md" --latest=false

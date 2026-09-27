@@ -26,6 +26,7 @@ public sealed class Preferencias
     public PerfilMotor Motor = PerfilMotor.Propulsor;
     public Ambiente.Qualidade Qualidade = Ambiente.Qualidade.Alta;
     public CameraRig.Modo Camera = CameraRig.Modo.Transmissao;
+    public Mundo.Telas.Modo Telas = Mundo.Telas.Modo.Uma;
 
     public static Preferencias Carregar()
     {
@@ -51,6 +52,8 @@ public sealed class Preferencias
             p.Qualidade = q;
         if (System.Enum.TryParse(cf.GetValue("jogo", "camera", "Transmissao").AsString(), out CameraRig.Modo c))
             p.Camera = c;
+        if (System.Enum.TryParse(cf.GetValue("jogo", "telas", "Uma").AsString(), out Mundo.Telas.Modo te))
+            p.Telas = te;
         return p;
     }
 
@@ -65,6 +68,7 @@ public sealed class Preferencias
         cf.SetValue("jogo", "motor", Motor.ToString());
         cf.SetValue("jogo", "qualidade", Qualidade.ToString());
         cf.SetValue("jogo", "camera", Camera.ToString());
+        cf.SetValue("jogo", "telas", Telas.ToString());
         cf.Save(Arquivo);
     }
 }

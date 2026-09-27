@@ -59,6 +59,8 @@ public partial class Main : Node3D
     private Estacao _estacao = null!;
     private Asteroides _asteroides = null!;
     private Ambiente.Qualidade _qualidade = Ambiente.Qualidade.Alta;
+    private Telas _telas = null!;
+    private Telas.Modo _modoTelas = Telas.Modo.Uma;
 
     private EstadoApp _estado = EstadoApp.Atracao;
     private double _contagem, _espera, _relogioDemo, _sairEm = -1, _vivo;
@@ -91,6 +93,7 @@ public partial class Main : Node3D
         _tipos = _prefs.Fontes;
         _perfilMotor = _prefs.Motor;
         _qualidade = _prefs.Qualidade;
+        _modoTelas = _prefs.Telas;
         Cfg.AquecimentoAtivo = _prefs.Aquecimento;
         Tracado.Usar(Circuitos.PorNome(_prefs.Circuito));
         LerArgumentos(OS.GetCmdlineUserArgs());
@@ -104,6 +107,16 @@ public partial class Main : Node3D
         AddChild(_camera);
         AddChild(_fx);
 
+        // Camada 0: as metades da tela dividida, que são desenho de mundo e
+        // ficam ABAIXO do HUD. O Hud vem na camada 1 (o padrão), por cima das
+        // duas — os painéis da ÍON e da ÍGNIS já nascem nos cantos certos, um
+        // sobre cada metade, então a divisão não pediu HUD novo.
+        var camadaTelas = new CanvasLayer { Layer = 0 };
+        AddChild(camadaTelas);
+        _telas = new Telas();
+        camadaTelas.AddChild(_telas);
+        _telas.Montar(_camera);
+
         var camada = new CanvasLayer();
         AddChild(camada);
         _hud = new Hud();
@@ -114,9 +127,12 @@ public partial class Main : Node3D
             _fontes[i] = CriarFonte(i, _tipos[i]);
 
         _camera.ModoAtual = _prefs.Camera;
+        _telas.ModoAtual = _modoTelas;
         if (_prefs.Mudo) _som.AlternarSurdina();
         MontarConfiguracoes();
-        _fx.Configurar(_corrida, _naves, _camera);
+        // O tremor vai pelo Telas, não pela câmera: com a tela dividida são
+        // três câmeras, e uma explosão que sacode só uma delas fica errada.
+        _fx.Configurar(_corrida, _naves, _telas.Tremer);
         _som.Configurar(_corrida);
         _som.DefinirPerfil(_perfilMotor);
         _fx.Marcador = _hud.Marcar;
@@ -185,6 +201,14 @@ public partial class Main : Node3D
                     _perfilMotor = valor.ToLowerInvariant() is "caca" or "caça" or "nave"
                         ? PerfilMotor.Caca
                         : PerfilMotor.Propulsor;
+                    break;
+                case "telas":
+                    _modoTelas = valor.ToLowerInvariant() switch
+                    {
+                        "duas" or "dividida" or "2" => Telas.Modo.Duas,
+                        "juntando" or "adaptativa" or "auto" => Telas.Modo.Juntando,
+                        _ => Telas.Modo.Uma,
+                    };
                     break;
             }
         }
@@ -385,11 +409,31 @@ public partial class Main : Node3D
         {
             Rotulo = "Câmera",
             Valor = () => CameraRig.NomeDoModo(_camera.ModoAtual),
+            // Com a tela dividida cada metade é sempre perseguição: "visão
+            // geral" e "transmissão" mostram as duas naves, e aí as metades
+            // ficariam iguais uma à outra.
+            Detalhe = () => _telas.ModoAtual == Telas.Modo.Uma
+                ? ""
+                : "vale na tela inteira; dividida é sempre perseguição",
             Mudar = d =>
             {
                 int i = ((int)_camera.ModoAtual + d + 3) % 3;
                 _camera.ModoAtual = (CameraRig.Modo)i;
                 _prefs.Camera = _camera.ModoAtual;
+            },
+        });
+
+        cfg.Acrescentar(new Opcao
+        {
+            Rotulo = "Telas",
+            Valor = () => Telas.NomeDoModo(_telas.ModoAtual),
+            Detalhe = () => Telas.DetalheDoModo(_telas.ModoAtual),
+            Mudar = d =>
+            {
+                int i = ((int)_telas.ModoAtual + d + 3) % 3;
+                _telas.ModoAtual = (Telas.Modo)i;
+                _modoTelas = _telas.ModoAtual;
+                _prefs.Telas = _modoTelas;
             },
         });
 
@@ -528,6 +572,7 @@ public partial class Main : Node3D
         int lider = _corrida.Posicao(_corrida.Naves[0]) == 1 ? 0 : 1;
         _camera.Cinematica = _estado == EstadoApp.Atracao;
         _camera.Atualizar(dt, _naves, lider);
+        _telas.Atualizar(dt, _naves, lider, _camera.Cinematica);
         AtualizarAncoras();
         _hud.Atualizar(dt, _estado, _contagem,
             $"{CameraRig.NomeDoModo(_camera.ModoAtual)} (C) · qualidade {Ambiente.Nome(_qualidade)} (Q)"
@@ -540,10 +585,16 @@ public partial class Main : Node3D
     /// <summary>Onde cada nave aparece na tela: o HUD prende nela o nome e os marcadores.</summary>
     private void AtualizarAncoras()
     {
-        var cam = _camera.Camera;
-        var tela = GetViewport().GetVisibleRect().Size;
         for (int i = 0; i < 2; i++)
         {
+            // Com a tela dividida, cada nave é projetada pela câmera da SUA
+            // metade e o resultado é deslocado para o canto dela — projetar as
+            // duas pela mesma câmera colocaria o marcador da ÍGNIS em cima da
+            // ÍON. Com uma tela só, isto devolve a câmera única e canto zero, e
+            // a conta é a mesma de antes.
+            var cam = _telas.CameraDe(i);
+            var canto = _telas.CantoDe(i);
+            var tela = _telas.TamanhoDe(i);
             var q = _naves[i].GlobalTransform;
             var ponto = q.Origin + q.Basis.Y * 0.9f;
             if (cam.IsPositionBehind(ponto))
@@ -553,6 +604,7 @@ public partial class Main : Node3D
             }
             var p = cam.UnprojectPosition(ponto);
             bool naTela = p.X > -60f && p.X < tela.X + 60f && p.Y > -60f && p.Y < tela.Y + 60f;
+            p += canto;
             // Com a câmera colada na nave (perseguição) o nome dela sai de cena.
             float alfa = Mathf.Clamp((cam.GlobalPosition.DistanceTo(ponto) - 12f) / 10f, 0f, 1f);
             _ancoras[i] = new AncoraNave(naTela, p, alfa);

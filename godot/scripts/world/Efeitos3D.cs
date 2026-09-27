@@ -33,7 +33,12 @@ public partial class Efeitos3D : Node3D, IEfeitos
 
     private Corrida _corrida = null!;
     private NaveVisual[] _naves = Array.Empty<NaveVisual>();
-    private CameraRig _camera = null!;
+    /// <summary>
+    /// Como sacudir a câmera. É um delegado e não um CameraRig porque com a
+    /// tela dividida existem três câmeras, e uma explosão que balança só uma
+    /// delas fica esquisita: quem sabe quantas são é o Telas.
+    /// </summary>
+    private Action<float> _tremer = _ => { };
     private readonly Dictionary<Voo, Projetil> _projeteis = new();
     private readonly List<Perdido> _perdidos = new();
     private double _t;
@@ -41,11 +46,11 @@ public partial class Efeitos3D : Node3D, IEfeitos
     /// <summary>Quem desenha as palavras que sobem da nave (o HUD, preso à nave na tela).</summary>
     public Action<int, string, Color, double>? Marcador;
 
-    public void Configurar(Corrida corrida, NaveVisual[] naves, CameraRig camera)
+    public void Configurar(Corrida corrida, NaveVisual[] naves, Action<float> tremer)
     {
         _corrida = corrida;
         _naves = naves;
-        _camera = camera;
+        _tremer = tremer;
     }
 
     // -- ciclo ------------------------------------------------------------------
@@ -215,7 +220,7 @@ public partial class Efeitos3D : Node3D, IEfeitos
         _perdidos.Clear();
     }
 
-    public void Largada() => _camera.Tremer(0.12f);
+    public void Largada() => _tremer(0.12f);
 
     public void Premio(Nave nave, Item item)
     {
@@ -266,7 +271,7 @@ public partial class Efeitos3D : Node3D, IEfeitos
             Particulas.Faiscas(this, pos, ciano, 40, 10f);
             Onda(alvo.Lane, ciano, 3.6f);
             Clarao(pos, ciano, 14f, 8f);
-            _camera.Tremer(0.2f);
+            _tremer(0.2f);
             Marcar(alvo.Lane, "bloqueado", ciano);
             return;
         }
@@ -277,7 +282,7 @@ public partial class Efeitos3D : Node3D, IEfeitos
             Particulas.Explosao(this, pos, Paleta.DoItem(Item.Bomba), 1f);
             Onda(alvo.Lane, laranja, 7.5f, 0.6);
             Clarao(pos, laranja, 50f, 18f, 0.55);
-            _camera.Tremer(0.7f);
+            _tremer(0.7f);
             Marcar(alvo.Lane, "parado!", Paleta.Alerta, 1.4);
         }
         else
@@ -286,7 +291,7 @@ public partial class Efeitos3D : Node3D, IEfeitos
             Particulas.Faiscas(this, pos, cor, 46, 12f);
             Onda(alvo.Lane, cor, 3.8f);
             Clarao(pos, cor, 20f, 10f);
-            _camera.Tremer(0.32f);
+            _tremer(0.32f);
             Marcar(alvo.Lane, "atingido", Paleta.Alerta);
         }
     }

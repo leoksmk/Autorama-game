@@ -86,6 +86,7 @@ chamando o executável do Godot, elas vão depois de `--`:
 | `--captura=rajada:<pasta>` | 60 fotos seguidas na câmera de perseguição |
 | `--sair-em=<s>` | fecha sozinho depois de *s* segundos |
 | `--motor=` | voz dos motores: `propulsor` (padrão) ou `caca` |
+| `--telas=` | `uma` (padrão), `duas`, `juntando` |
 | `--som-wav=<pasta>` | grava o banco de sons em `.wav` e fecha |
 
 ### Gerar o executável
@@ -109,19 +110,27 @@ que não vêm com o editor: Godot › *Editor* › *Gerenciar Modelos de Exporta
 *Baixar e Instalar*. É ~1 GB, uma vez só. O preset usado está versionado em
 [`godot/export_presets.cfg`](godot/export_presets.cfg).
 
-**Publicar uma versão** não exige nada disso na sua máquina:
+**Publicar não exige nada disso na sua máquina, nem um comando extra.** Todo
+`git push` na `main` dispara
+[`.github/workflows/release-windows.yml`](.github/workflows/release-windows.yml),
+que roda o mesmo `build_exe.py` num Windows limpo na nuvem — baixando Godot e
+templates por lá — e **substitui o zip** do release `ultima`, que é exatamente o
+que o link do topo deste arquivo baixa. Commitou, quem clicar no link depois de
+uns dez minutos já pega a versão nova.
+
+Mudanças só em texto (`README.md`, `docs/`, `capturas/`) não disparam build: não
+mexem no executável, e um build são ~10 minutos.
+
+Marcar uma tag continua servindo, para outra coisa — guardar um retrato de uma
+versão que prestou, sem tirar o `ultima` do lugar de download:
 
 ```powershell
-git tag v1.0
+git tag v1.1
 git push --tags
 ```
 
-A tag dispara [`.github/workflows/release-windows.yml`](.github/workflows/release-windows.yml),
-que roda o mesmo `build_exe.py` num Windows limpo na nuvem — baixando Godot e
-templates por lá — e cria o Release com o zip anexado. O link
-`releases/latest` do topo deste arquivo passa a apontar para ele
-automaticamente. Para testar sem criar Release, use *Run workflow* na aba
-**Actions**: o zip fica como artefato para baixar e conferir.
+Para conferir sem publicar nada, use *Run workflow* na aba **Actions**: o zip
+fica como artefato para baixar e testar.
 
 ### Teclas
 
@@ -134,12 +143,39 @@ automaticamente. Para testar sem criar Release, use *Run workflow* na aba
 câmera · `Q` troca a qualidade · `M` muta o som · `N` troca a voz dos motores ·
 `F11` tela cheia · `F3` FPS · `Esc` sai
 
+### Uma tela ou duas
+
+Em **Telas**, nas configurações, ficam três modos:
+
+| | |
+| --- | --- |
+| **uma tela** | o padrão: uma câmera só, em quem está na frente |
+| **duas telas** | cada nave na sua metade, o tempo todo |
+| **duas que se juntam** | divide quando as naves se afastam e volta a uma tela quando elas se reencontram |
+
+As duas metades são sempre **perseguição**, e o modo escolhido em *Câmera* passa
+a valer só na tela inteira: "visão geral" e "transmissão" enquadram as DUAS
+naves, então as metades sairiam iguais uma à outra e a divisão não mostraria
+nada de novo.
+
+O HUD não mudou de lugar: o painel da ÍON já nascia no canto esquerdo e o da
+ÍGNIS no direito, um sobre cada metade. O nome e os marcadores de cada nave são
+projetados pela câmera da metade dela — projetar os dois pela mesma câmera
+colocaria o marcador de uma em cima da outra.
+
+Por dentro são duas `SubViewport` dividindo o **mesmo** `World3D`: não é uma
+segunda cópia do mundo, é o mesmo mundo visto de outro lugar, então a física, as
+naves e as pedras continuam sendo calculadas uma vez só. O terceiro modo decide
+quadro a quadro pela distância entre as naves, com histerese (divide em 30 m,
+junta em 18 m) e um descanso de 0,9 s entre trocas — sem isso, duas naves
+emparelhadas na saída de uma curva fazem a tela piscar.
+
 ### Configurações
 
 A tela inicial tem **uma frase**: "Espaço para começar". Tudo que é escolha, e
 as regras junto, está atrás da **engrenagem no alto** — ou `Tab`. Ali ficam
 pista, controle de cada nave, som, **aquecimento do motor**, voz dos motores,
-qualidade, câmera e "como se joga". Setas escolhem e mudam, o mouse também
+qualidade, câmera, **telas** e "como se joga". Setas escolhem e mudam, o mouse também
 clica (metade direita da linha avança, a esquerda volta), `Esc` ou `Enter`
 fecha.
 
