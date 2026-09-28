@@ -88,6 +88,7 @@ chamando o executável do Godot, elas vão depois de `--`:
 | `--motor=` | voz dos motores: `propulsor` (padrão) ou `caca` |
 | `--telas=` | `uma` (padrão), `duas`, `juntando` |
 | `--medir-fps` | imprime a distribuição do tempo de quadro ao sair |
+| `--medir-cenas` | abre o painel e troca as pistas sozinho, cronometrando cada uma |
 | `--som-wav=<pasta>` | grava o banco de sons em `.wav` e fecha |
 
 ### Gerar o executável
@@ -191,6 +192,44 @@ inteira — é o que diz que a histerese e o descanso estão dando conta. A PLAN
 BAIXA é a que menos divide (18%): é plana e curta, e as naves ficam mais tempo
 emparelhadas. Se em alguma pista o comportamento incomodar, os dois números
 estão no topo de [`Telas.cs`](godot/scripts/world/Telas.cs).
+
+### O custo de desenho, medido
+
+Com `--medir-fps`, numa corrida de 45 s no INTERLAGOS a 60 Hz, qualidade alta,
+numa RTX 2050 de notebook — o que vale olhar é o p99 e os quadros longos, não a
+média, porque é um punhado de quadros gordos que faz o jogo *parecer* travado:
+
+| modo | p50 | p99 | pior | quadros > 20 ms |
+| --- | --- | --- | --- | --- |
+| uma tela | 16,7 ms | 16,7 ms | 16,7 ms | 0 |
+| duas telas | 16,7 ms | 16,7 ms | 21,7 ms | 1 |
+| duas que se juntam | 16,7 ms | 16,7 ms | 16,7 ms | 0 |
+
+**A tela dividida não custa quadro nenhum em regime.** As duas metades juntas
+desenham o mesmo tanto de pixel que a tela inteira, e o mundo é um só.
+
+O que chegou a custar foi a **transição**, e por uma razão boba: durante o
+esmaecimento o mundo era desenhado três vezes — a câmera única por baixo mais as
+duas metades. Dava trancos de 30 ms, três ou quatro por corrida. Agora as
+metades se revezam durante a transição: cada uma desenha em quadros alternados
+e, no quadro de folga, o alvo guarda a imagem anterior. São duas renderizações
+em vez de três, e 0,28 s de metade a 30 quadros atrás de um esmaecimento não se
+vê. Antes: 19 quadros acima de 20 ms e 99 ms de atraso somado. Depois: 0 a 2
+quadros e até 16 ms.
+
+**O que ainda custa**, e não é a corrida:
+
+| quando | custo | por quê |
+| --- | --- | --- |
+| abrir o jogo | ~230 ms | a primeira montagem do mundo, com o JIT do C# frio |
+| primeiro desenho do painel | ~61 ms | rasterizar as fontes; só na primeira vez |
+| trocar de pista | ~65 ms | leito ~30 ms, asteroides ~19 ms, estação ~12 ms |
+
+Abrir o painel em si custa **0,5 ms** — o que pesa é o quadro que o desenha pela
+primeira vez. A troca de pista regenera tudo que nasce da geometria, e por isso
+só acontece no menu. Daria para deixar instantânea guardando as cinco pistas já
+montadas em memória, ao custo de segurar cinco cinturões de pedras vivos.
+
 
 ### Configurações
 

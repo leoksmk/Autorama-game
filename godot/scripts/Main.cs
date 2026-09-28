@@ -19,6 +19,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -68,6 +69,7 @@ public partial class Main : Node3D
     private bool _demo;
     private Captura? _captura;
     private MedidorFps? _medidor;
+    private MedirCenas? _cenas;
     private string? _exportarSom;
     private PerfilMotor _perfilMotor = PerfilMotor.Propulsor;
 
@@ -206,6 +208,10 @@ public partial class Main : Node3D
                     break;
                 case "medir-fps":
                     _medidor = new MedidorFps();
+                    break;
+                case "medir-cenas":
+                    _medidor ??= new MedidorFps();
+                    _cenas = new MedirCenas(this);
                     break;
                 case "telas":
                     _modoTelas = valor.ToLowerInvariant() switch
@@ -586,6 +592,7 @@ public partial class Main : Node3D
 
         _medidor?.Quadro(delta, _estado == EstadoApp.Corrida,
             _hud.Config.Aberta ? "painel" : _estado.ToString());
+        _cenas?.Passo(delta);
         _captura?.Passo(delta);
     }
 
@@ -896,6 +903,59 @@ public partial class Main : Node3D
                 + $"p99={P(0.99)} pior={o[^1].ToString("F1", ic)} ms | "
                 + $">20ms={longos} ({(100.0 * longos / o.Count).ToString("F1", ic)}%) "
                 + $">33ms={muito} | atraso somado={perdido.ToString("F0", ic)} ms");
+        }
+    }
+
+    // -- medição de cenas ----------------------------------------------------------------
+
+    /// <summary>
+    /// Faz sozinho as coisas caras da interface — abrir o painel, mostrar as
+    /// regras, trocar de pista — e cronometra cada uma (<c>--medir-cenas</c>).
+    ///
+    /// Existe separado do <c>--captura</c> por um motivo que só apareceu
+    /// medindo: salvar um PNG custa ~145 ms, porque obriga a CPU a esperar a
+    /// GPU e ainda codifica a imagem. Num roteiro com captura, TODO quadro de
+    /// foto vira um pico — e aí não dá para distinguir a travada do jogo da
+    /// travada da régua. Aqui não se salva nada.
+    /// </summary>
+    private sealed class MedirCenas
+    {
+        private readonly Main _m;
+        private readonly (double t, string nome, Action acao)[] _roteiro;
+        private double _t;
+        private int _passo;
+
+        public MedirCenas(Main m)
+        {
+            _m = m;
+            var c = m;
+            _roteiro = new (double, string, Action)[]
+            {
+                (1.0, "abrir painel", () => c._hud.Config.Abrir()),
+                (1.8, "mostrar regras", () => c._hud.Config.AlternarRegras()),
+                (2.6, "fechar regras", () => c._hud.Config.AlternarRegras()),
+                (3.4, "trocar pista 1", () => c.AplicarCircuito(Circuitos.Todos[1])),
+                (4.6, "trocar pista 2", () => c.AplicarCircuito(Circuitos.Todos[2])),
+                (5.8, "trocar pista 3", () => c.AplicarCircuito(Circuitos.Todos[3])),
+                (7.0, "trocar pista 4", () => c.AplicarCircuito(Circuitos.Todos[4])),
+                (8.2, "voltar a pista 0", () => c.AplicarCircuito(Circuitos.Todos[0])),
+                (9.4, "fechar painel", () => c._hud.Config.Fechar()),
+                (10.2, "comecar corrida", () => c.IniciarContagem()),
+            };
+        }
+
+        public void Passo(double dt)
+        {
+            _t += dt;
+            while (_passo < _roteiro.Length && _t >= _roteiro[_passo].t)
+            {
+                var (_, nome, acao) = _roteiro[_passo++];
+                var relogio = Stopwatch.StartNew();
+                acao();
+                relogio.Stop();
+                GD.Print($"CENA {nome}: "
+                    + $"{relogio.Elapsed.TotalMilliseconds.ToString("F1", CultureInfo.InvariantCulture)} ms");
+            }
         }
     }
 

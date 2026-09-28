@@ -78,6 +78,7 @@ public sealed partial class Telas : Control
     private bool _querDividir;
     private float _desdeTroca = Descanso;
     private int _aquecidos;
+    private bool _revezando;
 
     /// <param name="unica">A câmera que continua desenhando por baixo.</param>
     public void Montar(CameraRig unica)
@@ -218,8 +219,8 @@ public sealed partial class Telas : Control
         Modulate = new Color(1f, 1f, 1f, _alfa);
 
         // Com as metades cobrindo tudo, a câmera única não precisa desenhar; e
-        // com a tela inteira, as metades não precisam. Durante a transição as
-        // três desenham, porque é disso que a transição é feita.
+        // com a tela inteira, as metades não precisam.
+        bool transicao = aparece && _alfa < 0.999f;
         _unica.Camera.Current = _alfa < 0.999f;
         var quando = aparece ? SubViewport.UpdateMode.Always : SubViewport.UpdateMode.Disabled;
         // Aquecimento: nos dois primeiros quadros as metades desenham uma vez
@@ -252,9 +253,21 @@ public sealed partial class Telas : Control
         _risco.Position = new Vector2(meio - risco * 0.5f, 0f);
         _risco.Size = new Vector2(risco, tam.Y);
 
-        foreach (var v in _vistas)
+        // Durante a transição o mundo seria desenhado TRÊS vezes: a câmera
+        // única por baixo mais as duas metades. Medido, é isso que fazia a
+        // corrida dar trancos de 30 ms quando o modo que junta dividia ou
+        // juntava. Aqui as metades passam a se revezar: cada uma desenha em
+        // quadros alternados e, no quadro de folga, o alvo guarda a imagem
+        // anterior. Dá duas renderizações em vez de três, e as metades correm
+        // a 30 quadros por 0,28 s — atrás de um esmaecimento, ninguém vê.
+        if (transicao) _revezando = !_revezando;
+
+        for (int i = 0; i < _vistas.Length; i++)
         {
-            v.RenderTargetUpdateMode = quando;
+            var v = _vistas[i];
+            v.RenderTargetUpdateMode = transicao && (i == 0) != _revezando
+                ? SubViewport.UpdateMode.Disabled
+                : quando;
             // O antisserrilhado das metades acompanha o do jogo: quem baixa a
             // qualidade no Q não pode continuar pagando 4x MSAA em duas telas.
             v.Msaa3D = GetViewport().Msaa3D;
