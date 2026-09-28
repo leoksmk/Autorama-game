@@ -166,10 +166,30 @@ colocaria o marcador de uma em cima da outra.
 
 Por dentro são duas `SubViewport` dividindo o **mesmo** `World3D`: não é uma
 segunda cópia do mundo, é o mesmo mundo visto de outro lugar, então a física, as
-naves e as pedras continuam sendo calculadas uma vez só. O terceiro modo decide
-quadro a quadro pela distância entre as naves, com histerese (divide em 30 m,
-junta em 18 m) e um descanso de 0,9 s entre trocas — sem isso, duas naves
-emparelhadas na saída de uma curva fazem a tela piscar.
+naves e as pedras continuam sendo calculadas uma vez só.
+
+O terceiro modo decide quadro a quadro pela distância entre as naves, com
+histerese (divide em 30 m, junta em 18 m) e um descanso de 0,9 s entre trocas —
+sem isso, duas naves emparelhadas na saída de uma curva fazem a tela piscar. Os
+dois números são **fixos e não crescem com o circuito**: a pergunta que eles
+respondem é "da minha câmera dá para ver a outra nave?", e quem decide isso é o
+tamanho da nave e a distância da câmera de perseguição, iguais em toda pista.
+
+Medido nos cinco circuitos, numa corrida de CPU contra CPU (`--demo`):
+
+| circuito | separação mín. | mediana | máx. | tempo dividido | trocas |
+| --- | --- | --- | --- | --- | --- |
+| ANEL DE ÍCARO | 4,4 m | 33,1 m | 100,3 m | 53% | 3 |
+| PLANTA BAIXA | 4,0 m | 8,2 m | 35,9 m | 18% | 3 |
+| INTERLAGOS ORBITAL | 4,4 m | 4,4 m | 93,4 m | 27% | 3 |
+| ÍCARO BRUTO | 5,2 m | 15,8 m | 104,7 m | 40% | 3 |
+| ÓRBITA CLÁSSICA | 4,4 m | 4,4 m | 87,9 m | 37% | 3 |
+
+Os cinco dividem e voltam a juntar, e nenhum passa de **3 trocas** numa corrida
+inteira — é o que diz que a histerese e o descanso estão dando conta. A PLANTA
+BAIXA é a que menos divide (18%): é plana e curta, e as naves ficam mais tempo
+emparelhadas. Se em alguma pista o comportamento incomodar, os dois números
+estão no topo de [`Telas.cs`](godot/scripts/world/Telas.cs).
 
 ### Configurações
 
