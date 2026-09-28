@@ -18,6 +18,7 @@
 //     --som-wav=<pasta>            grava o banco de sons em .wav e sai
 
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -66,6 +67,7 @@ public partial class Main : Node3D
     private double _contagem, _espera, _relogioDemo, _sairEm = -1, _vivo;
     private bool _demo;
     private Captura? _captura;
+    private MedidorFps? _medidor;
     private string? _exportarSom;
     private PerfilMotor _perfilMotor = PerfilMotor.Propulsor;
 
@@ -201,6 +203,9 @@ public partial class Main : Node3D
                     _perfilMotor = valor.ToLowerInvariant() is "caca" or "caça" or "nave"
                         ? PerfilMotor.Caca
                         : PerfilMotor.Propulsor;
+                    break;
+                case "medir-fps":
+                    _medidor = new MedidorFps();
                     break;
                 case "telas":
                     _modoTelas = valor.ToLowerInvariant() switch
@@ -579,6 +584,8 @@ public partial class Main : Node3D
             + $" · som {(_som.EmSurdina ? "mudo" : "ligado")} (M)"
             + $" · motor {_som.NomeDoPerfil} (N)");
 
+        _medidor?.Quadro(delta, _estado == EstadoApp.Corrida,
+            _hud.Config.Aberta ? "painel" : _estado.ToString());
         _captura?.Passo(delta);
     }
 
@@ -823,7 +830,74 @@ public partial class Main : Node3D
             _serial.Dispose();
     }
 
-    public override void _ExitTree() => _serial.Dispose();
+    public override void _ExitTree()
+    {
+        _medidor?.Relatorio();
+        _serial.Dispose();
+    }
+
+    // -- medição de quadros --------------------------------------------------------------
+
+    /// <summary>
+    /// Guarda o tempo de cada quadro e imprime a distribuição na saída
+    /// (<c>--medir-fps</c>).
+    ///
+    /// Percentil, e não média: a média esconde justamente o que faz o jogo
+    /// PARECER travado. Uma corrida que roda a 60 fps com meia dúzia de quadros
+    /// de 200 ms tem média ótima e joga mal. Quem denuncia isso é o p99 e a
+    /// contagem de quadros longos.
+    ///
+    /// A separação entre "tudo" e "só corrida" é o que diz de que tipo é o
+    /// problema: custo de desenho aparece na corrida inteira e empurra a
+    /// mediana; engasgo de compilação de shader aparece como um punhado de
+    /// quadros enormes logo depois de uma troca de tela, com a mediana boa.
+    /// </summary>
+    private sealed class MedidorFps
+    {
+        private readonly List<double> _todos = new(30000);
+        private readonly List<double> _corrida = new(30000);
+
+        private readonly List<(double t, string onde, double ms)> _longos = new();
+        private double _relogio;
+
+        public void Quadro(double dt, bool correndo, string onde)
+        {
+            double ms = dt * 1000.0;
+            _relogio += dt;
+            _todos.Add(ms);
+            if (correndo) _corrida.Add(ms);
+            // Só os quadros longos ficam com contexto. São poucos, e é neles
+            // que está a travada — saber em que tela cada um caiu é o que
+            // separa "custa caro desenhar" de "engasgou ao entrar aqui".
+            if (ms > 20.0) _longos.Add((_relogio, onde, ms));
+        }
+
+        public void Relatorio()
+        {
+            Linha("tudo", _todos);
+            Linha("corrida", _corrida);
+            foreach (var (t, onde, ms) in _longos.OrderByDescending(x => x.ms).Take(12))
+                GD.Print($"FPS[longo] {t.ToString("F1", CultureInfo.InvariantCulture)}s "
+                    + $"{onde} {ms.ToString("F0", CultureInfo.InvariantCulture)} ms");
+        }
+
+        private static void Linha(string etiqueta, List<double> v)
+        {
+            if (v.Count == 0) return;
+            var o = new List<double>(v);
+            o.Sort();
+            // Cultura invariante: com vírgula decimal, qualquer conta feita em
+            // cima desta saída lê 12,3 como 12.
+            var ic = CultureInfo.InvariantCulture;
+            string P(double q) => o[Math.Min(o.Count - 1, (int)(q * o.Count))].ToString("F1", ic);
+            int longos = o.Count(x => x > 20.0), muito = o.Count(x => x > 33.0);
+            double perdido = o.Where(x => x > 20.0).Sum(x => x - 20.0);
+            GD.Print($"FPS[{etiqueta}] n={o.Count} p50={P(0.50)} p90={P(0.90)} "
+                + $"p99={P(0.99)} pior={o[^1].ToString("F1", ic)} ms | "
+                + $">20ms={longos} ({(100.0 * longos / o.Count).ToString("F1", ic)}%) "
+                + $">33ms={muito} | atraso somado={perdido.ToString("F0", ic)} ms");
+        }
+    }
 
     // -- roteiro de verificação ----------------------------------------------------------
 

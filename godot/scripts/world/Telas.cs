@@ -77,6 +77,7 @@ public sealed partial class Telas : Control
     private float _alfa;
     private bool _querDividir;
     private float _desdeTroca = Descanso;
+    private int _aquecidos;
 
     /// <param name="unica">A câmera que continua desenhando por baixo.</param>
     public void Montar(CameraRig unica)
@@ -140,6 +141,19 @@ public sealed partial class Telas : Control
         foreach (var r in _rigs) r.Tremer(quanto);
     }
 
+    /// <summary>
+    /// Desenha um quadro em cada metade, escondida, nos primeiros instantes.
+    ///
+    /// A primeira vez que uma SubViewport desenha, ela paga a criação do alvo
+    /// de renderização e a compilação dos pipelines daquela combinação de
+    /// material e luz. Medido, isso é uma travada de dezenas de milissegundos —
+    /// e sem este aquecimento ela cai na PRIMEIRA divisão, que acontece no meio
+    /// da corrida, que é o pior lugar possível. Aqui ela cai na tela de
+    /// atração, onde ninguém está jogando.
+    ///
+    /// São dois quadros, e não um: o primeiro cria o alvo, o segundo pega o que
+    /// só compila com o alvo já existente.
+    /// </summary>
     /// <summary>A câmera que enquadra a nave `lane` agora, para o HUD projetar nela.</summary>
     public Camera3D CameraDe(int lane) => Dividido ? _rigs[lane].Camera : _unica.Camera;
 
@@ -208,6 +222,19 @@ public sealed partial class Telas : Control
         // três desenham, porque é disso que a transição é feita.
         _unica.Camera.Current = _alfa < 0.999f;
         var quando = aparece ? SubViewport.UpdateMode.Always : SubViewport.UpdateMode.Disabled;
+        // Aquecimento: nos dois primeiros quadros as metades desenham uma vez
+        // cada, escondidas. A PRIMEIRA vez que uma SubViewport desenha, ela paga
+        // a criação do alvo de renderização e a compilação dos pipelines daquela
+        // combinação de material e luz — medido, dezenas de milissegundos. Sem
+        // isto essa conta cai na primeira divisão, no meio da corrida, que é o
+        // pior lugar possível; aqui ela cai na tela de atração, onde ninguém
+        // está jogando. São dois quadros porque o primeiro cria o alvo e o
+        // segundo pega o que só compila com o alvo já existente.
+        if (_aquecidos < 2)
+        {
+            _aquecidos++;
+            quando = SubViewport.UpdateMode.Once;
+        }
 
         // O tamanho vem da viewport, e não das âncoras: este Control pendura
         // num CanvasLayer, e ali a âncora só vira tamanho depois de uma passada

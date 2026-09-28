@@ -87,6 +87,7 @@ chamando o executável do Godot, elas vão depois de `--`:
 | `--sair-em=<s>` | fecha sozinho depois de *s* segundos |
 | `--motor=` | voz dos motores: `propulsor` (padrão) ou `caca` |
 | `--telas=` | `uma` (padrão), `duas`, `juntando` |
+| `--medir-fps` | imprime a distribuição do tempo de quadro ao sair |
 | `--som-wav=<pasta>` | grava o banco de sons em `.wav` e fecha |
 
 ### Gerar o executável
